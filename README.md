@@ -31,9 +31,7 @@ filtering, dynamic column ordering.
 
 ## Examples
 
-Slab can render a simple table over records you already have, with sortable columns —
-sorting patches `sort` params onto the URL, and the LiveView requeries in
-`handle_params/3`:
+Slab can render a simple table over records you already have with sortable columns:
 
 ```heex
 <Slab.table id="users-table" data={@users} uri={@uri} params={@params}>
@@ -42,10 +40,10 @@ sorting patches `sort` params onto the URL, and the LiveView requeries in
 </Slab.table>
 ```
 
-Or it can render a complex UI including querying your database with querying, filtering, and sorting.
-In the UI, all state is stored in query params in the URL. These drive
-filtering, sorting, pagination, column layout, selection, exports, tabs, and inline
-editing:
+Or it can render a complex component. On the backend it can query, filter, and
+sort results directly from the database. In the UI, all state is stored in
+query params in the URL. These drive filtering, sorting, pagination, column
+layout, selection, exports, tabs, and inline editing:
 
 ```heex
 <Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo}
