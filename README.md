@@ -1,10 +1,10 @@
-<p align="center">
-  <img title="v1.0.0 Screenshot" src="https://raw.githubusercontent.com/chrislaskey/slab/refs/heads/main/examples/screenshot-v1.0.0.png" width="600">
-</p>
-
 # Slab
 
 > A composable data table component for Phoenix LiveView.
+
+<p align="center">
+  <img title="v1.0.0 Screenshot" src="https://raw.githubusercontent.com/chrislaskey/slab/refs/heads/main/examples/screenshot-v1.0.0.png" width="600">
+</p>
 
 ## Architecture
 
