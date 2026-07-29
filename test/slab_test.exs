@@ -1509,6 +1509,56 @@ defmodule SlabTest do
       assert payload.content == "\uFEFFName\r\nUser 1\r\nUser 2\r\nUser 3\r\n"
     end
 
+    test "export_value makes virtual columns exportable and overrides field values" do
+      data = [
+        %{id: 1, name: "Ada", products: ["Two", "One"]},
+        %{id: 2, name: "Grace", products: []}
+      ]
+
+      assigns = %{
+        id: "test-table",
+        data: data,
+        schema: nil,
+        repo: nil,
+        uri: "https://example.com/users",
+        params: %{},
+        tab: [%{name: "export"}],
+        column: [
+          %{field: :name, export_value: fn record -> String.upcase(record.name) end},
+          %{
+            label: "Products",
+            export_value: fn record -> record.products |> Enum.sort() |> Enum.join(", ") end
+          },
+          %{label: "Actions"}
+        ]
+      }
+
+      {:ok, socket} = Slab.Live.update(assigns, export_socket())
+      {:noreply, socket} = Slab.Live.handle_event("export-current", %{}, socket)
+
+      assert [["slab-download-test-table", payload]] = export_push_events(socket)
+
+      # The field column exports the function's value, the virtual Products
+      # column joins the export, and Actions (no field, no export_value)
+      # stays skipped
+      assert payload.content == "\uFEFFName,Products\r\nADA,\"One, Two\"\r\nGRACE,\r\n"
+    end
+
+    test "raises on an export_value with the wrong arity" do
+      assert_raise ArgumentError, ~r/export_value> must be a 1-arity function/, fn ->
+        render_component(
+          fn assigns ->
+            ~H"""
+            <Slab.table id="test-table" data={[]} uri="https://example.com/users">
+              <:column field={:name} export_value={fn _record, _extra -> nil end} />
+            </Slab.table>
+            """
+          end,
+          %{}
+        )
+      end
+    end
+
     test "export-limit re-runs the filtered query from the top in query mode" do
       assigns = %{
         id: "test-table",

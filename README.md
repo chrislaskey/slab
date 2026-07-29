@@ -386,9 +386,20 @@ buttons:
 
 Exports honor the current filters, sort, and column selection. Columns
 export their raw field values — nil as empty, dates and times as ISO 8601,
-lists joined with `", "` — and virtual columns without a `field` (like
-action links) are skipped. `Slab.Export.csv/2` is public for reuse in
-custom export code.
+lists joined with `", "` — or the result of their `export_value` function
+when given, a 1-arity function receiving the record:
+
+```heex
+<:column :let={user} label="Products"
+  export_value={fn user -> Enum.map_join(user.products, ", ", & &1.name) end}>
+  <.product_badges products={user.products} />
+</:column>
+```
+
+That is how computed columns (a body but no `field`) join an export;
+without a `field` or an `export_value`, a virtual column (like action
+links) is skipped. `Slab.Export.csv/2` is public for reuse in custom
+export code.
 
 The file travels over the LiveView socket as part of a `push_event`, which
 is what makes the zero-setup delivery possible — and why `limit` should
@@ -475,6 +486,7 @@ HexDocs. The tables below are the quick version.
 | `label` | humanized field | `label="Full Name"` | Column header text |
 | `sortable` | `false` | `sortable` | Header becomes a sort patch link; whitelists the field for `ORDER BY` in query mode |
 | `optional` | `false` | `optional` | Starts the column hidden until enabled via the Columns tab or `columns[]` param |
+| `export_value` | `nil` | `export_value={&products_csv/1}` | 1-arity `(record) -> value` used when exporting; makes virtual columns exportable and overrides the raw field value |
 
 Columns with a body receive the record via `:let`:
 

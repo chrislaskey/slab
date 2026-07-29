@@ -61,5 +61,17 @@ defmodule Slab.ExportTest do
 
       assert csv == "Name,Email\r\nAda,\r\n"
     end
+
+    test "function accessors compute the value from the record" do
+      records = [%{name: "Ada", products: ["Two", "One"]}]
+
+      csv =
+        Slab.Export.csv(records, [
+          {"Name", :name},
+          {"Products", fn record -> record.products |> Enum.sort() |> Enum.join("; ") end}
+        ])
+
+      assert csv == "Name,Products\r\nAda,One; Two\r\n"
+    end
   end
 end

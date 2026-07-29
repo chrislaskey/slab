@@ -231,13 +231,19 @@ defmodule Slab do
 
   Exports honor the current filters, sort, and column selection. Columns
   render their raw field values (see `Slab.Export.csv/2` for the value
-  formats); virtual columns without a `field` — like action links — are
-  skipped. The file travels over the LiveView socket, so keep `limit` in
-  the thousands, not the millions:
+  formats), or the result of their `export_value` function when given — a
+  1-arity function receiving the record. That is how computed columns (a
+  body but no `field`) join an export; without a `field` or an
+  `export_value`, a virtual column — like action links — is skipped. The
+  file travels over the LiveView socket, so keep `limit` in the thousands,
+  not the millions:
 
       <Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo} uri={@uri} params={@params}>
         <:tab name="export" limit={5000} />
         <:column field={:name} />
+        <:column :let={user} label="Products" export_value={fn user -> Enum.map_join(user.products, ", ", & &1.name) end}>
+          <.product_badges products={user.products} />
+        </:column>
         <:pagination mode={:page} />
       </Slab.table>
 
@@ -450,6 +456,13 @@ defmodule Slab do
         "starts the column hidden until enabled through the Columns tab or the " <>
           "columns[] URL param"
     )
+
+    attr(:export_value, :any,
+      doc:
+        "1-arity function (record) -> value used when exporting this column; " <>
+          "makes virtual columns exportable and overrides the raw field value " <>
+          "on field columns"
+    )
   end
 
   slot(:column_checkbox,
@@ -486,6 +499,7 @@ defmodule Slab do
     validate_column_checkbox!(assigns)
     validate_tabs!(assigns)
     validate_filters!(assigns)
+    validate_columns!(assigns)
     assigns = assign(assigns, :repo, resolve_repo!(assigns))
 
     ~H"""
@@ -597,6 +611,16 @@ defmodule Slab do
         raise ArgumentError,
               "Slab.table <:filter query> must be a 2-arity function " <>
                 "(queryable, value) -> queryable."
+      end
+    end)
+  end
+
+  defp validate_columns!(%{column: columns}) do
+    Enum.each(columns, fn column ->
+      if column[:export_value] && !is_function(column[:export_value], 1) do
+        raise ArgumentError,
+              "Slab.table <:column export_value> must be a 1-arity function " <>
+                "(record) -> value."
       end
     end)
   end

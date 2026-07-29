@@ -826,11 +826,21 @@ defmodule Slab.Live do
     })
   end
 
-  # Exports carry the visible columns in their current order; virtual
-  # columns without a field (like action links) have no exportable value
+  # Exports carry the visible columns in their current order. A column
+  # contributes its export_value function when given, otherwise its raw
+  # field value; virtual columns with neither (like action links) have no
+  # exportable value.
   defp export_columns(cols) do
-    for col <- cols, is_atom(col[:field]) && col[:field] do
-      {column_label(col), col.field}
+    for col <- cols, accessor = export_accessor(col) do
+      {column_label(col), accessor}
+    end
+  end
+
+  defp export_accessor(col) do
+    cond do
+      is_function(col[:export_value], 1) -> col[:export_value]
+      is_atom(col[:field]) && col[:field] -> col.field
+      true -> nil
     end
   end
 

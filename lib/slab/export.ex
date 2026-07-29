@@ -11,8 +11,17 @@ defmodule Slab.Export do
   @doc """
   Renders records as an RFC 4180 CSV binary.
 
-  `columns` is a list of `{header, field}` tuples — one per CSV column, in
-  order. Each row reads `field` from the record and formats the value:
+  `columns` is a list of `{header, accessor}` tuples — one per CSV column,
+  in order. An accessor is either a field to read from the record or a
+  1-arity function receiving the record and returning the value — the
+  latter is how computed columns export:
+
+      Slab.Export.csv(records, [
+        {"Name", :name},
+        {"Products", fn record -> Enum.map_join(record.products, ", ", & &1.name) end}
+      ])
+
+  Each value is then formatted:
 
     * `nil` renders as an empty field
     * dates and times render as ISO 8601
@@ -33,11 +42,16 @@ defmodule Slab.Export do
 
     rows =
       for record <- records do
-        Enum.map(columns, fn {_header, field} -> format_value(Map.get(record, field)) end)
+        Enum.map(columns, fn {_header, accessor} ->
+          record |> read_value(accessor) |> format_value()
+        end)
       end
 
     IO.iodata_to_binary(Enum.map([headers | rows], &encode_row/1))
   end
+
+  defp read_value(record, accessor) when is_function(accessor, 1), do: accessor.(record)
+  defp read_value(record, field), do: Map.get(record, field)
 
   defp encode_row(values) do
     [values |> Enum.map(&escape/1) |> Enum.intersperse(","), "\r\n"]
