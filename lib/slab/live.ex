@@ -60,8 +60,36 @@ defmodule Slab.Live do
       |> assign(:visible_cols, visible_cols(Map.get(assigns, :column, []), params))
       |> assign_pagination(assigns, params, data, has_next?, total)
       |> assign_tabs(assigns, params, uri)
+      |> assign_editing(assigns)
 
     {:ok, socket}
+  end
+
+  # Helpers - Inline editing
+
+  # Editing is active when any visible column is editable and an on_save
+  # callback is present. Pending edits and save errors are keyed by row id
+  # and live in the component — they are transient state, not URL state.
+  defp assign_editing(socket, assigns) do
+    on_save = Map.get(assigns, :on_save)
+    schema = Slab.Query.schema_module(Map.get(assigns, :schema))
+
+    editable_cols =
+      for col <- socket.assigns.visible_cols,
+          Map.get(col, :editable, false) && is_atom(col[:field]) && col[:field],
+          do: col
+
+    edit_inputs =
+      Map.new(editable_cols, fn col ->
+        {to_string(col.field), {col.field, Slab.Query.filter_input_defaults(schema, col.field)}}
+      end)
+
+    socket
+    |> assign_new(:edits, fn -> %{} end)
+    |> assign_new(:edit_errors, fn -> %{} end)
+    |> assign(:editing?, editable_cols != [] && is_function(on_save, 2))
+    |> assign(:on_save, on_save)
+    |> assign(:edit_inputs, edit_inputs)
   end
 
   # Slots arrive as lists of maps. Flatten the singleton slots and the
@@ -472,9 +500,19 @@ defmodule Slab.Live do
         </Slab.tabs>
       </div>
 
+      <form
+        :for={record <- @data}
+        :if={@editing?}
+        id={row_form_id(@id, record)}
+        phx-target={@myself}
+        phx-change="edit-row"
+        phx-submit="save-row"
+      >
+        <input type="hidden" name="row_id" value={Map.get(record, :id)} />
+      </form>
+
       <section class="px-4 py-3 border border-gray-200 bg-white shadow-sm rounded-lg">
-        <form>
-          <.table>
+        <.table>
           <:thead>
             <.tr>
               <.th :if={@checkable?}>
@@ -507,34 +545,65 @@ defmodule Slab.Live do
                   <span :if={!sortable?(col, @uri)}>{column_label(col)}</span>
                 </div>
               </.th>
+              <.th :if={@editing?}><span class="sr-only">Save</span></.th>
             </.tr>
           </:thead>
-          <.tr :for={record <- @data}>
-            <.td :if={@checkable?}>
-              <div
-                class="px-1 h-full"
-                phx-target={@myself}
-                phx-click="toggle-checkbox-for-row"
-                phx-value-id={Map.get(record, :id)}
-              >
-                <.checkbox
-                  name="checked_row"
-                  checked={Map.get(@checked_ids_lookup, to_string(Map.get(record, :id))) || false}
-                />
-              </div>
-            </.td>
-            <.td :for={col <- @visible_cols}>
-              <div class="px-1">
-                <%= if col[:inner_block] do %>
-                  {render_slot(col, record)}
-                <% else %>
-                  {render_field_value(record, col[:field], @field_types)}
-                <% end %>
-              </div>
-            </.td>
-          </.tr>
-          </.table>
-        </form>
+          <%= for record <- @data do %>
+            <.tr>
+              <.td :if={@checkable?}>
+                <div
+                  class="px-1 h-full"
+                  phx-target={@myself}
+                  phx-click="toggle-checkbox-for-row"
+                  phx-value-id={Map.get(record, :id)}
+                >
+                  <.checkbox
+                    name="checked_row"
+                    checked={Map.get(@checked_ids_lookup, to_string(Map.get(record, :id))) || false}
+                  />
+                </div>
+              </.td>
+              <.td :for={col <- @visible_cols}>
+                <div class="px-1">
+                  <%= cond do %>
+                    <% @editing? && is_map_key(@edit_inputs, to_string(col[:field])) -> %>
+                      <.edit_input
+                        name={to_string(col.field)}
+                        form={row_form_id(@id, record)}
+                        value={edit_input_value(@edits, record, col.field)}
+                        input={edit_input_config(@edit_inputs, col.field)}
+                      />
+                    <% col[:inner_block] -> %>
+                      {render_slot(col, record)}
+                    <% true -> %>
+                      {render_field_value(record, col[:field], @field_types)}
+                  <% end %>
+                </div>
+              </.td>
+              <.td :if={@editing?}>
+                <div class="px-1 flex justify-center">
+                  <button
+                    type="submit"
+                    form={row_form_id(@id, record)}
+                    disabled={!row_dirty?(@edits, record)}
+                    title={Map.get(@edit_errors, row_key(record)) || "Save row"}
+                    class={save_button_class(row_dirty?(@edits, record), Map.has_key?(@edit_errors, row_key(record)))}
+                  >
+                    <span class="sr-only">Save row</span>
+                    <.icon type="check-outline" class="h-5 w-5" />
+                  </button>
+                </div>
+              </.td>
+            </.tr>
+            <.tr :if={@editing? && Map.has_key?(@edit_errors, row_key(record))}>
+              <.td colspan={row_colspan(assigns)}>
+                <div class="px-1 -mt-1 pb-1 text-sm text-red-500">
+                  {Map.get(@edit_errors, row_key(record))}
+                </div>
+              </.td>
+            </.tr>
+          <% end %>
+        </.table>
       </section>
 
       <div :if={@paginate == :page} class="my-2 py-2 flex items-center justify-between gap-x-4">
@@ -753,6 +822,31 @@ defmodule Slab.Live do
     {:noreply, push_patch(socket, to: to)}
   end
 
+  def handle_event("edit-row", %{"row_id" => row_id} = params, socket) do
+    edits =
+      case find_record(socket.assigns.data, row_id) do
+        nil ->
+          socket.assigns.edits
+
+        record ->
+          case changed_params(record, params, socket.assigns.edit_inputs) do
+            changes when changes == %{} -> Map.delete(socket.assigns.edits, row_id)
+            changes -> Map.put(socket.assigns.edits, row_id, changes)
+          end
+      end
+
+    {:noreply, assign(socket, :edits, edits)}
+  end
+
+  def handle_event("save-row", %{"row_id" => row_id} = params, socket) do
+    with record when not is_nil(record) <- find_record(socket.assigns.data, row_id),
+         changes when changes != %{} <- changed_params(record, params, socket.assigns.edit_inputs) do
+      {:noreply, apply_save(socket, record, row_id, changes)}
+    else
+      _missing_or_unchanged -> {:noreply, socket}
+    end
+  end
+
   def handle_event("export-current", _params, socket) do
     {:noreply, push_download(socket, socket.assigns.data)}
   end
@@ -790,6 +884,133 @@ defmodule Slab.Live do
 
     {:noreply, push_patch(socket, to: checked_path(socket.assigns.uri, updated))}
   end
+
+  # Helpers - Inline editing functions
+
+  defp edit_input(%{input: {"select", _options}} = assigns) do
+    ~H"""
+    <select name={@name} form={@form} class={edit_select_class()}>
+      <option :for={{label, value} <- elem(@input, 1)} value={value} selected={to_string(value) == @value}>
+        {label}
+      </option>
+    </select>
+    """
+  end
+
+  defp edit_input(assigns) do
+    ~H"""
+    <input type="text" name={@name} form={@form} value={@value} class={edit_text_class()} />
+    """
+  end
+
+  # Text inputs read as plain text until focused: the border is transparent
+  # (not absent, so focusing never shifts layout) and the negative margin
+  # cancels the cell padding, aligning the value with non-editable cells.
+  defp edit_text_class do
+    "w-[calc(100%+0.5rem)] -mx-1 rounded-lg border border-transparent bg-transparent py-1 px-1 " <>
+      "text-sm text-zinc-700 focus:border-cyan-600 focus:bg-white focus:outline-none focus:ring-0"
+  end
+
+  defp edit_select_class do
+    "w-full rounded-lg border border-zinc-300 bg-white py-1 px-2 text-sm text-zinc-700 " <>
+      "focus:border-cyan-600 focus:outline-none focus:ring-0"
+  end
+
+  defp save_button_class(dirty?, error?) do
+    base = "flex items-center justify-center disabled:cursor-default"
+
+    cond do
+      error? -> "#{base} text-red-500 hover:text-red-600"
+      dirty? -> "#{base} text-cyan-600 hover:text-cyan-700"
+      true -> "#{base} text-gray-300"
+    end
+  end
+
+  defp row_form_id(id, record), do: "#{id}-row-#{Map.get(record, :id)}"
+
+  defp row_key(record), do: to_string(Map.get(record, :id))
+
+  defp row_dirty?(edits, record), do: Map.has_key?(edits, row_key(record))
+
+  defp row_colspan(assigns) do
+    length(assigns.visible_cols) + if(assigns.checkable?, do: 2, else: 1)
+  end
+
+  defp edit_input_config(edit_inputs, field) do
+    {_field, input} = Map.fetch!(edit_inputs, to_string(field))
+    input
+  end
+
+  # Inputs reflect the pending edit when one exists, so unrelated
+  # re-renders never clobber typed-but-unsaved values.
+  defp edit_input_value(edits, record, field) do
+    case edits |> Map.get(row_key(record), %{}) |> Map.fetch(to_string(field)) do
+      {:ok, value} -> value
+      :error -> edit_value(record, field)
+    end
+  end
+
+  # The string an editable field renders into its input — also the baseline
+  # a submitted value is compared against to detect a change.
+  defp edit_value(record, field) do
+    case Map.get(record, field) do
+      nil -> ""
+      %DateTime{} = value -> DateTime.to_iso8601(value)
+      %NaiveDateTime{} = value -> NaiveDateTime.to_iso8601(value)
+      %Date{} = value -> Date.to_iso8601(value)
+      %Time{} = value -> Time.to_iso8601(value)
+      value -> to_string(value)
+    end
+  end
+
+  # Only declared editable fields are considered, and only values that
+  # differ from the record's current value count as changes — raw strings,
+  # for the caller's changeset to cast.
+  defp changed_params(record, params, edit_inputs) do
+    for {key, {field, _input}} <- edit_inputs,
+        Map.has_key?(params, key),
+        Map.get(params, key) != edit_value(record, field),
+        into: %{} do
+      {key, Map.get(params, key)}
+    end
+  end
+
+  defp apply_save(socket, record, row_id, changes) do
+    case socket.assigns.on_save.(record, changes) do
+      {:ok, updated} ->
+        socket
+        |> assign(:data, replace_record(socket.assigns.data, row_id, updated))
+        |> assign(:edits, Map.delete(socket.assigns.edits, row_id))
+        |> assign(:edit_errors, Map.delete(socket.assigns.edit_errors, row_id))
+
+      {:error, error} ->
+        socket
+        |> assign(:edits, Map.put(socket.assigns.edits, row_id, changes))
+        |> assign(
+          :edit_errors,
+          Map.put(socket.assigns.edit_errors, row_id, format_save_error(error))
+        )
+    end
+  end
+
+  defp find_record(data, row_id) do
+    Enum.find(data, fn record -> row_key(record) == row_id end)
+  end
+
+  defp replace_record(data, row_id, updated) do
+    Enum.map(data, fn record ->
+      if row_key(record) == row_id, do: updated, else: record
+    end)
+  end
+
+  defp format_save_error(%{__struct__: Ecto.Changeset, errors: errors}) do
+    Enum.map_join(errors, ", ", fn {field, {message, _opts}} ->
+      "#{humanize_field(field)} #{message}"
+    end)
+  end
+
+  defp format_save_error(message) when is_binary(message), do: message
+  defp format_save_error(other), do: inspect(other)
 
   # Helpers - Export functions
 

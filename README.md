@@ -461,6 +461,46 @@ For selections that span paginated results, use
 `Slab.get_selected_and_missing_ids/3` to split checked IDs into records
 already on the current page and IDs that need fetching.
 
+### Inline editing
+
+Mark columns as `editable` and pass an `on_save` function. Editable columns
+render their input directly in the cell — there is no edit mode — and a
+save column (no heading) appears at the end of the table. Editing a value
+highlights the row's save button; clicking it (or pressing Enter) calls
+`on_save` once with the row's record and the changed fields:
+
+```heex
+<Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo}
+  uri={@uri} params={@params} on_save={&save_user/2}>
+  <:column field={:name} editable />
+  <:column field={:role} editable />
+  <:column field={:inserted_at} />
+</Slab.table>
+```
+
+```elixir
+def save_user(user, params) do
+  user
+  |> MyApp.User.changeset(params)
+  |> MyApp.Repo.update()
+end
+```
+
+Slab never writes to the database itself: `on_save` receives the record and
+a map of only the changed fields, with raw string values
+(`%{"name" => "Ada"}`) — cast them with your own changeset. Return
+`{:ok, updated_record}` to clear the row's pending state and render the
+updated record in place, or `{:error, changeset_or_message}` to keep the
+edits and show the error under the row.
+
+Input types derive from the schema — booleans and `Ecto.Enum` fields get a
+select, everything else a text input. Text inputs read as plain text until
+focused, keeping the table scannable. Multiple columns can change before
+one save, and each row saves independently (each row is its own form, so
+Enter submits just that row). Pending edits are component state, not URL
+state: they survive re-renders, sorting, and filtering, but not a page
+reload.
+
 ## Reference
 
 Full documentation for every attribute, with types and defaults, is generated
@@ -477,6 +517,7 @@ HexDocs. The tables below are the quick version.
 | `repo` | `nil` | `repo={MyApp.Repo}` | Repo for query mode; falls back to `config :slab, repo: MyApp.Repo` |
 | `uri` | `nil` | `uri={@uri}` | Current request URI from `handle_params/3`; required by URL-driven slots |
 | `params` | `%{}` | `params={@params}` | Current request params from `handle_params/3`; carries sort/page/filter/column/selection state |
+| `on_save` | `nil` | `on_save={&save_user/2}` | 2-arity `(record, changed_params) -> {:ok, record} \| {:error, error}` called on row save; required when any column is `editable` |
 
 ### `<:column>` slot attributes
 
@@ -487,6 +528,7 @@ HexDocs. The tables below are the quick version.
 | `sortable` | `false` | `sortable` | Header becomes a sort patch link; whitelists the field for `ORDER BY` in query mode |
 | `optional` | `false` | `optional` | Starts the column hidden until enabled via the Columns tab or `columns[]` param |
 | `export_value` | `nil` | `export_value={&products_csv/1}` | 1-arity `(record) -> value` used when exporting; makes virtual columns exportable and overrides the raw field value |
+| `editable` | `false` | `editable` | Renders the cell as an input feeding the row's save action; requires a `field` and the table's `on_save`, and cannot combine with a body |
 
 Columns with a body receive the record via `:let`:
 

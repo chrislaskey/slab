@@ -290,6 +290,41 @@ defmodule Slab do
   `checked?/1`. For selections spanning paginated results, see
   `get_selected_and_missing_ids/3`.
 
+  ### Inline editing
+
+  Mark columns as `editable` and pass an `on_save` function. Editable
+  columns render their input directly in the cell — there is no edit mode —
+  and a save column (no heading) appears at the end of the table. Editing a
+  value highlights the row's save button; clicking it (or pressing Enter)
+  calls `on_save` once with the row's record and the changed fields:
+
+      <Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo}
+        uri={@uri} params={@params} on_save={&save_user/2}>
+        <:column field={:name} editable />
+        <:column field={:role} editable />
+        <:column field={:inserted_at} />
+      </Slab.table>
+
+      def save_user(user, params) do
+        user
+        |> MyApp.User.changeset(params)
+        |> MyApp.Repo.update()
+      end
+
+  Slab never writes to the database itself: `on_save` receives the record
+  and a map of only the changed fields, with raw string values
+  (`%{"name" => "Ada"}`) — cast them with your own changeset. Return
+  `{:ok, updated_record}` to clear the row's pending state and render the
+  updated record in place, or `{:error, changeset_or_message}` to keep the
+  edits and show the error under the row.
+
+  Input types derive from the schema — booleans and `Ecto.Enum` fields get
+  a select, everything else a text input. Text inputs read as plain text
+  until focused, keeping the table scannable. Multiple columns can change
+  before one save, and each row saves independently. Pending edits are
+  component state, not URL state: they survive re-renders, sorting, and
+  filtering, but not a page reload.
+
   ## Styling
 
   Markup is styled with Tailwind CSS utility classes. Ensure your app's
@@ -370,6 +405,14 @@ defmodule Slab do
     doc:
       "the current request params, from handle_params/3; carries sort, filter, " <>
         "pagination, column, and selection state"
+  )
+
+  attr(:on_save, :any,
+    default: nil,
+    doc:
+      "2-arity function (record, changed_params) -> {:ok, record} | {:error, error} " <>
+        "called when a row's save button is clicked; required when any column is " <>
+        "editable — Slab never writes to the database itself"
   )
 
   slot :tab,
@@ -463,6 +506,12 @@ defmodule Slab do
           "makes virtual columns exportable and overrides the raw field value " <>
           "on field columns"
     )
+
+    attr(:editable, :boolean,
+      doc:
+        "renders the cell as an input feeding the row's save action; requires a " <>
+          "field and the table's on_save function, and cannot combine with a body"
+    )
   end
 
   slot(:column_checkbox,
@@ -511,6 +560,7 @@ defmodule Slab do
       repo={@repo}
       uri={@uri}
       params={@params}
+      on_save={@on_save}
       tab={@tab}
       filter={@filter}
       column={@column}
@@ -615,14 +665,45 @@ defmodule Slab do
     end)
   end
 
-  defp validate_columns!(%{column: columns}) do
-    Enum.each(columns, fn column ->
-      if column[:export_value] && !is_function(column[:export_value], 1) do
+  defp validate_columns!(%{column: columns, on_save: on_save}) do
+    Enum.each(columns, &validate_column!/1)
+
+    cond do
+      Enum.any?(columns, &Map.get(&1, :editable, false)) && is_nil(on_save) ->
+        raise ArgumentError,
+              "Slab.table editable columns require on_save — a 2-arity function " <>
+                "(record, changed_params) called when a row is saved. Slab never " <>
+                "writes to the database itself."
+
+      on_save && !is_function(on_save, 2) ->
+        raise ArgumentError,
+              "Slab.table on_save must be a 2-arity function (record, changed_params)."
+
+      true ->
+        :ok
+    end
+  end
+
+  defp validate_column!(column) do
+    cond do
+      column[:export_value] && !is_function(column[:export_value], 1) ->
         raise ArgumentError,
               "Slab.table <:column export_value> must be a 1-arity function " <>
                 "(record) -> value."
-      end
-    end)
+
+      Map.get(column, :editable, false) && !(is_atom(column[:field]) && column[:field]) ->
+        raise ArgumentError,
+              "Slab.table <:column editable> requires a field — the input reads " <>
+                "and writes it."
+
+      Map.get(column, :editable, false) && column[:inner_block] ->
+        raise ArgumentError,
+              "Slab.table <:column editable> cannot have a body — editable " <>
+                "columns render an input."
+
+      true ->
+        :ok
+    end
   end
 
   @doc """

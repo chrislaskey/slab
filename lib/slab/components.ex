@@ -66,12 +66,13 @@ defmodule Slab.Components do
   @doc """
   Renders a `<td>` element.
   """
+  attr(:rest, :global, include: ~w(colspan rowspan))
   slot(:inner_block, required: true)
 
   @spec td(map()) :: Phoenix.LiveView.Rendered.t()
   def td(assigns) do
     ~H"""
-    <td class="pt-1 pb-2.5 align-top">
+    <td class="pt-1 pb-2.5 align-top" {@rest}>
       {render_slot(@inner_block)}
     </td>
     """
@@ -120,6 +121,7 @@ defmodule Slab.Components do
 
   ## Supported types
 
+    * `"check-outline"`
     * `"check-circle-outline"`
     * `"x-circle-outline"`
     * `"chevron-up-outline"`
@@ -139,6 +141,21 @@ defmodule Slab.Components do
   def icon(assigns) do
     ~H"""
     {render_icon(@type, %{class: @class})}
+    """
+  end
+
+  defp render_icon("check-outline", assigns) do
+    ~H"""
+    <svg
+      class={assigns.class}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke-width="2"
+      stroke="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+    </svg>
     """
   end
 

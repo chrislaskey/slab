@@ -1589,6 +1589,258 @@ defmodule SlabTest do
     end
   end
 
+  describe "table/1 inline editing" do
+    defp noop_save(_record, _changes), do: {:ok, nil}
+
+    defp editing_assigns(overrides \\ %{}) do
+      Map.merge(
+        %{
+          id: "test-table",
+          data: [
+            %{id: 1, name: "Ada", role: "admin"},
+            %{id: 2, name: "Grace", role: "member"}
+          ],
+          schema: nil,
+          repo: nil,
+          uri: "https://example.com/users",
+          params: %{},
+          on_save: &noop_save/2,
+          column: [
+            %{field: :name, editable: true},
+            %{field: :role, editable: true},
+            %{label: "Actions"}
+          ]
+        },
+        overrides
+      )
+    end
+
+    test "editable columns render inputs owned by per-row forms" do
+      html =
+        render_component(
+          fn assigns ->
+            ~H"""
+            <Slab.table
+              id="test-table"
+              data={@data}
+              schema={SlabTest.User}
+              uri={@uri}
+              params={@params}
+              on_save={@on_save}
+            >
+              <:column field={:name} editable />
+              <:column field={:role} editable />
+              <:column field={:inserted_at} />
+            </Slab.table>
+            """
+          end,
+          data: SlabTest.FakeRepo.users(),
+          uri: "https://example.com/users",
+          params: %{},
+          on_save: &noop_save/2
+        )
+
+      # One form per row, outside the table, carrying the row id
+      assert html =~ ~s(id="test-table-row-0b937381-b621-4a3f-aa9a-a08e26f04b02")
+      assert html =~ ~s(phx-change="edit-row")
+      assert html =~ ~s(phx-submit="save-row")
+      assert html =~ ~s(name="row_id")
+
+      # Text input for the string field, owned by the row's form
+      assert html =~
+               ~r{<input type="text" name="name" form="test-table-row-0b937381[^"]*" value="Ada"}
+
+      # Ecto.Enum field derives a select with its values as options
+      assert html =~ ~r{<select name="role" form="test-table-row-0b937381}
+      assert html =~ ~s(<option value="admin")
+      assert html =~ ~s(<option value="guest")
+
+      # Text inputs read as plain text until focused; selects keep their
+      # visible border
+      assert html =~ ~r{<input type="text"[^>]*border-transparent[^>]*focus:border-cyan-600}
+      assert html =~ ~r{<select[^>]*border-zinc-300}
+
+      # Non-editable column keeps normal rendering (no input)
+      refute html =~ ~s(name="inserted_at")
+
+      # Save column: no visible heading, one submit button per row, idle
+      # (disabled and gray) until a change arrives
+      assert html =~ ~r{<span class="sr-only">Save</span>}
+      assert html =~ ~r{<button[^>]*type="submit"[^>]*form="test-table-row-0b937381[^"]*"}
+      assert html =~ ~r{<button[^>]*disabled[^>]*>}
+      assert html =~ "text-gray-300"
+    end
+
+    test "renders no editing chrome without editable columns" do
+      html =
+        render_component(
+          fn assigns ->
+            ~H"""
+            <Slab.table id="test-table" data={@data} uri={@uri}>
+              <:column field={:name} />
+            </Slab.table>
+            """
+          end,
+          data: [%{id: 1, name: "Ada"}],
+          uri: "https://example.com/users"
+        )
+
+      refute html =~ "edit-row"
+      refute html =~ "save-row"
+      refute html =~ ~s(<span class="sr-only">Save</span>)
+    end
+
+    test "edit-row tracks changed values and clears reverted ones" do
+      {:ok, socket} = Slab.Live.update(editing_assigns(), %Phoenix.LiveView.Socket{})
+
+      params = %{"row_id" => "1", "name" => "Ada Lovelace", "role" => "admin"}
+      {:noreply, socket} = Slab.Live.handle_event("edit-row", params, socket)
+
+      # Only the differing field counts as a change
+      assert socket.assigns.edits == %{"1" => %{"name" => "Ada Lovelace"}}
+
+      # Reverting to the original clears the pending edit
+      reverted = %{"row_id" => "1", "name" => "Ada", "role" => "admin"}
+      {:noreply, socket} = Slab.Live.handle_event("edit-row", reverted, socket)
+
+      assert socket.assigns.edits == %{}
+    end
+
+    test "save-row calls on_save with the record and only the changed fields" do
+      test_pid = self()
+
+      on_save = fn record, changes ->
+        send(test_pid, {:saved, record, changes})
+        {:ok, %{record | name: "Ada Lovelace", role: "guest"}}
+      end
+
+      {:ok, socket} =
+        Slab.Live.update(editing_assigns(%{on_save: on_save}), %Phoenix.LiveView.Socket{})
+
+      params = %{"row_id" => "1", "name" => "Ada Lovelace", "role" => "guest"}
+      {:noreply, socket} = Slab.Live.handle_event("edit-row", params, socket)
+      {:noreply, socket} = Slab.Live.handle_event("save-row", params, socket)
+
+      # Both changed columns arrive in one save, as raw strings
+      assert_received {:saved, %{id: 1, name: "Ada"},
+                       %{"name" => "Ada Lovelace", "role" => "guest"}}
+
+      # The returned record replaces the row, and pending state clears
+      assert Enum.at(socket.assigns.data, 0).name == "Ada Lovelace"
+      assert socket.assigns.edits == %{}
+      assert socket.assigns.edit_errors == %{}
+    end
+
+    test "save-row with no changes never calls on_save" do
+      test_pid = self()
+
+      on_save = fn record, changes ->
+        send(test_pid, {:saved, record, changes})
+        {:ok, record}
+      end
+
+      {:ok, socket} =
+        Slab.Live.update(editing_assigns(%{on_save: on_save}), %Phoenix.LiveView.Socket{})
+
+      params = %{"row_id" => "1", "name" => "Ada", "role" => "admin"}
+      {:noreply, _socket} = Slab.Live.handle_event("save-row", params, socket)
+
+      refute_received {:saved, _record, _changes}
+    end
+
+    test "save-row errors keep the edits and render under the row" do
+      on_save = fn _record, _changes -> {:error, "Name is taken"} end
+
+      {:ok, socket} =
+        Slab.Live.update(editing_assigns(%{on_save: on_save}), %Phoenix.LiveView.Socket{})
+
+      params = %{"row_id" => "1", "name" => "Grace", "role" => "admin"}
+      {:noreply, socket} = Slab.Live.handle_event("edit-row", params, socket)
+      {:noreply, socket} = Slab.Live.handle_event("save-row", params, socket)
+
+      assert socket.assigns.edit_errors == %{"1" => "Name is taken"}
+      assert socket.assigns.edits == %{"1" => %{"name" => "Grace"}}
+
+      html = render_component(&Slab.Live.render/1, Map.put(socket.assigns, :myself, nil))
+      assert html =~ "Name is taken"
+      assert html =~ "text-red-500"
+      assert html =~ ~s(colspan="4")
+    end
+
+    test "changeset errors format as field messages" do
+      changeset = %Ecto.Changeset{errors: [name: {"can't be blank", []}]}
+      on_save = fn _record, _changes -> {:error, changeset} end
+
+      {:ok, socket} =
+        Slab.Live.update(editing_assigns(%{on_save: on_save}), %Phoenix.LiveView.Socket{})
+
+      params = %{"row_id" => "1", "name" => "", "role" => "admin"}
+      {:noreply, socket} = Slab.Live.handle_event("save-row", params, socket)
+
+      assert socket.assigns.edit_errors == %{"1" => "Name can't be blank"}
+    end
+
+    test "raises on editable columns without on_save" do
+      assert_raise ArgumentError, ~r/editable columns require on_save/, fn ->
+        render_component(
+          fn assigns ->
+            ~H"""
+            <Slab.table id="test-table" data={[]} uri="https://example.com/users">
+              <:column field={:name} editable />
+            </Slab.table>
+            """
+          end,
+          %{}
+        )
+      end
+    end
+
+    test "raises on an on_save with the wrong arity" do
+      assert_raise ArgumentError, ~r/on_save must be a 2-arity function/, fn ->
+        render_component(
+          fn assigns ->
+            ~H"""
+            <Slab.table id="test-table" data={[]} uri="https://example.com/users" on_save={@on_save}>
+              <:column field={:name} editable />
+            </Slab.table>
+            """
+          end,
+          on_save: fn _record -> :ok end
+        )
+      end
+    end
+
+    test "raises on an editable column without a field" do
+      assert_raise ArgumentError, ~r/editable> requires a field/, fn ->
+        render_component(
+          fn assigns ->
+            ~H"""
+            <Slab.table id="test-table" data={[]} uri="https://example.com/users" on_save={@on_save}>
+              <:column label="Actions" editable />
+            </Slab.table>
+            """
+          end,
+          on_save: &noop_save/2
+        )
+      end
+    end
+
+    test "raises on an editable column with a body" do
+      assert_raise ArgumentError, ~r/editable> cannot have a body/, fn ->
+        render_component(
+          fn assigns ->
+            ~H"""
+            <Slab.table id="test-table" data={[]} uri="https://example.com/users" on_save={@on_save}>
+              <:column :let={user} field={:name} editable>{user.name}</:column>
+            </Slab.table>
+            """
+          end,
+          on_save: &noop_save/2
+        )
+      end
+    end
+  end
+
   describe "tabs/1" do
     test "renders tab labels with icons, count badges, and toggleable content" do
       html =

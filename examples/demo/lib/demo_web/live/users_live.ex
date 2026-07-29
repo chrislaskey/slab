@@ -27,6 +27,9 @@ defmodule DemoWeb.UsersLive do
           <.link navigate={~p"/feed"} class="text-cyan-600 hover:underline">
             Feed (cursor pagination)
           </.link>
+          <.link navigate={~p"/edit"} class="text-cyan-600 hover:underline">
+            Edit (inline editing)
+          </.link>
         </nav>
 
         <h1 class="text-xl font-semibold">Users</h1>
