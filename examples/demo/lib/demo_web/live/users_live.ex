@@ -39,7 +39,7 @@ defmodule DemoWeb.UsersLive do
           <:tab name="columns" />
           <:tab name="share" />
           <:tab name="export" />
-          <:tab name="custom" label="Custom tab" icon="bookmark-outline">
+          <:tab name="custom" label="Custom" icon="bookmark-outline">
             <p class="mt-1 py-2 text-sm text-gray-600">
               A custom tab — declare any name with a label and a body.
             </p>

@@ -937,12 +937,18 @@ defmodule Slab do
   defp active_tab?(_tab, index, nil), do: index == 0
   defp active_tab?(tab, _index, active), do: tab.label == active
 
-  @tab_label_base "px-4 py-2 flex items-center gap-x-1 cursor-pointer text-sm text-zinc-700 hover:text-cyan-600"
-  @tab_label_active "-mb-px bg-gray-50 rounded-tl rounded-tr border border-b-0 border-gray-200"
+  # Every tab carries the same border widths and negative margin — inactive
+  # tabs just render them transparent — so selecting a tab swaps colors
+  # without shifting any content. The two border colors are toggled
+  # inversely (never both present) so stylesheet order can't pick a winner.
+  @tab_label_base "-mb-px px-4 py-3 flex items-center gap-x-1 cursor-pointer text-sm " <>
+                    "border border-b-0 text-zinc-700 hover:text-cyan-600"
+  @tab_label_inactive "border-transparent"
+  @tab_label_active "bg-gray-50 rounded-tl rounded-tr border-gray-200"
   @tab_content_base "p-4 bg-gray-50 border border-gray-200"
 
   defp tab_label_class(true), do: "#{@tab_label_base} #{@tab_label_active}"
-  defp tab_label_class(false), do: @tab_label_base
+  defp tab_label_class(false), do: "#{@tab_label_base} #{@tab_label_inactive}"
 
   defp tab_content_class(active?, flush_bottom?) do
     variant =
@@ -965,6 +971,8 @@ defmodule Slab do
 
     %JS{}
     |> JS.remove_class(@tab_label_active, to: labels)
+    |> JS.add_class(@tab_label_inactive, to: labels)
+    |> JS.remove_class(@tab_label_inactive, to: label)
     |> JS.add_class(@tab_label_active, to: label)
     |> JS.add_class("hidden", to: contents)
     |> JS.remove_class("hidden", to: content)
