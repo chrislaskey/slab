@@ -1130,6 +1130,171 @@ defmodule SlabTest do
     end
   end
 
+  describe "table/1 export" do
+    defp render_export_table(attrs) do
+      render_component(
+        fn assigns ->
+          ~H"""
+          <Slab.table
+            id="test-table"
+            schema={SlabTest.User}
+            repo={SlabTest.FakeRepo}
+            paginate={@paginate}
+            uri={@uri}
+            params={@params}
+            export_tab?={@export_tab?}
+            export_limit={@export_limit}
+          >
+            <:col field={:name} />
+          </Slab.table>
+          """
+        end,
+        Map.merge(
+          %{
+            paginate: :page,
+            uri: "https://example.com/users",
+            params: %{},
+            export_tab?: true,
+            export_limit: 1000
+          },
+          attrs
+        )
+      )
+    end
+
+    defp export_socket do
+      %Phoenix.LiveView.Socket{private: %{live_temp: %{}}}
+    end
+
+    defp export_push_events(socket) do
+      socket.private.live_temp[:push_events]
+    end
+
+    test "renders the Export tab with both download buttons and the hook" do
+      html = render_export_table(%{})
+
+      assert html =~ "Export CSV"
+      assert html =~ "Download current page"
+      # FakeRepo counts 42 entries, under the limit of 1000
+      assert html =~ "Download all data"
+      refute html =~ "Download first"
+
+      # The colocated hook's "." prefix expands to the module namespace
+      assert html =~ ~s(phx-hook="Slab.Live.Download")
+      assert html =~ ~s(data-slab-id="test-table")
+      assert html =~ ~s(phx-click="export-current")
+      assert html =~ ~s(phx-click="export-limit")
+    end
+
+    test "labels the full export by row count when the total exceeds the limit" do
+      html = render_export_table(%{export_limit: 10})
+
+      assert html =~ "Download first 10 rows"
+      refute html =~ "Download all data"
+    end
+
+    test "labels the full export by row count when the total is unknown" do
+      html = render_export_table(%{paginate: :cursor})
+
+      assert html =~ "Download first 1000 rows"
+      refute html =~ "Download all data"
+    end
+
+    test "omits the full export button without pagination" do
+      html = render_export_table(%{paginate: nil})
+
+      assert html =~ "Download current page"
+      refute html =~ "export-limit"
+    end
+
+    test "the Export tab is absent by default" do
+      html = render_export_table(%{export_tab?: false})
+
+      refute html =~ "Download current page"
+    end
+
+    test "export-current downloads the page as displayed" do
+      data = for n <- 1..5, do: %{id: n, name: "User #{n}"}
+
+      assigns = %{
+        id: "test-table",
+        data: data,
+        schema: nil,
+        repo: nil,
+        uri: "https://example.com/users?page=2",
+        params: %{"page" => "2"},
+        paginate: :page,
+        per_page: 2,
+        export_tab?: true,
+        col: [%{field: :name}, %{label: "Actions"}]
+      }
+
+      {:ok, socket} = Slab.Live.update(assigns, export_socket())
+      {:noreply, socket} = Slab.Live.handle_event("export-current", %{}, socket)
+
+      assert [["slab-download-test-table", payload]] = export_push_events(socket)
+      assert payload.filename == "test-table-#{Date.utc_today()}.csv"
+      assert payload.mime =~ "text/csv"
+
+      # UTF-8 BOM, then the visible page only — virtual columns are skipped
+      assert payload.content == "\uFEFFName\r\nUser 3\r\nUser 4\r\n"
+    end
+
+    test "export-limit takes the first export_limit rows of list data" do
+      data = for n <- 1..5, do: %{id: n, name: "User #{n}"}
+
+      assigns = %{
+        id: "test-table",
+        data: data,
+        schema: nil,
+        repo: nil,
+        uri: "https://example.com/users?page=2",
+        params: %{"page" => "2"},
+        paginate: :page,
+        per_page: 2,
+        export_tab?: true,
+        export_limit: 3,
+        col: [%{field: :name}]
+      }
+
+      {:ok, socket} = Slab.Live.update(assigns, export_socket())
+      {:noreply, socket} = Slab.Live.handle_event("export-limit", %{}, socket)
+
+      assert [["slab-download-test-table", payload]] = export_push_events(socket)
+      assert payload.content == "\uFEFFName\r\nUser 1\r\nUser 2\r\nUser 3\r\n"
+    end
+
+    test "export-limit re-runs the filtered query from the top in query mode" do
+      assigns = %{
+        id: "test-table",
+        data: nil,
+        schema: User,
+        repo: FakeRepo,
+        uri: "https://example.com/users?page=3",
+        params: %{"page" => "3", "filter" => %{"name" => "a"}},
+        paginate: :page,
+        per_page: 2,
+        export_tab?: true,
+        export_limit: 100,
+        col: [%{field: :name, filterable: true}]
+      }
+
+      {:ok, socket} = Slab.Live.update(assigns, export_socket())
+      assert_received {:repo_all, _page_query}
+      {:noreply, socket} = Slab.Live.handle_event("export-limit", %{}, socket)
+
+      # The export query keeps the filter but restarts at record one
+      assert_received {:repo_all, %Ecto.Query{} = query}
+      assert [_where] = query.wheres
+      assert query.limit
+      assert inspect(query.offset.params) =~ "{0, :integer}"
+
+      # FakeRepo returns all three users, ignoring the page the viewer was on
+      assert [["slab-download-test-table", payload]] = export_push_events(socket)
+      assert payload.content == "\uFEFFName\r\nAda\r\nGrace\r\nKatherine\r\n"
+    end
+  end
+
   describe "tabs/1" do
     test "renders tab labels with icons, count badges, and toggleable content" do
       html =
@@ -1203,6 +1368,11 @@ defmodule SlabTest do
       # The colocated hook's "." prefix expands to the module namespace
       assert html =~ ~s(phx-hook="Slab.CopyToClipboard")
       assert html =~ "Copy to clipboard"
+
+      # Input and button share the filter inputs' sizing, so switching tabs
+      # doesn't jitter
+      assert html =~ ~r{<form class="[^"]*min-h-10[^"]*rounded-lg}
+      assert html =~ ~r{<button[^>]*class="min-h-10[^"]*rounded-lg}
     end
   end
 

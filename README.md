@@ -328,10 +328,44 @@ definition — nothing to declare:
   holding a read-only copy of the current URL with a copy-to-clipboard
   button — meaningful because *all* table state lives in the URL
 
+- an **Export** tab appears when `export_tab?` is set (see the next section)
+
 No qualifying tabs, no tab bar. The building blocks stay public for custom
 layouts outside the table: `Slab.tabs/1` (client-side tabs with icons and
 count badges), `Slab.share/1`, and `Slab.filter/1`, plus the badge helpers
 `Slab.get_filter_count/1` and `Slab.Helpers.URI.get_query_param_count/1`.
+
+### Exporting
+
+The Export tab downloads the table as CSV, generated server-side and
+delivered through the browser — no routes or setup beyond registering
+Slab's hooks (see [JavaScript hooks](#javascript-hooks)). It offers two
+buttons:
+
+- **Download current page** — the rows exactly as displayed
+- **Download all data** — the first `export_limit` rows (default 1000) of
+  the current filtered, sorted result; when the total exceeds the limit
+  the button reads "Download first N rows" instead
+
+```heex
+<Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo}
+  paginate={:page} export_tab? export_limit={5000} uri={@uri} params={@params}>
+  <:col field={:name} />
+</Slab.table>
+```
+
+Exports honor the current filters, sort, and column selection. Columns
+export their raw field values — nil as empty, dates and times as ISO 8601,
+lists joined with `", "` — and virtual columns without a `field` (like
+action links) are skipped. `Slab.Export.csv/2` is public for reuse in
+custom export code.
+
+The file travels over the LiveView socket as part of a `push_event`, which
+is what makes the zero-setup delivery possible — and why `export_limit`
+should stay in the thousands. For genuinely large exports, stream from a
+controller instead: reuse `Slab.Query.apply_filters/4` and
+`Slab.Query.apply_sort/3` to reconstruct the query from the same URL
+params, and `Slab.Export.csv/2` to serialize each batch.
 
 ### Column visibility and order
 
@@ -406,6 +440,8 @@ HexDocs. The tables below are the quick version.
 | `per_page_options` | `[10, 25, 50, 100]` | `per_page_options={[25, 100]}` | Page sizes offered in the footer dropdown (page mode) |
 | `share_tab?` | `false` | `share_tab?` | Shows the Share tab above the table when `uri` is present |
 | `columns_tab?` | `false` | `columns_tab?` | Shows the Columns tab, letting users toggle and reorder columns via `columns[]` |
+| `export_tab?` | `false` | `export_tab?` | Shows the Export tab with CSV downloads of the current page or the filtered result |
+| `export_limit` | `1000` | `export_limit={5000}` | Maximum rows in a full-data export; the file travels over the LiveView socket, so keep it modest |
 
 ### `<:col>` slot attributes
 

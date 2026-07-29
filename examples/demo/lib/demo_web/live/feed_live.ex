@@ -46,6 +46,8 @@ defmodule DemoWeb.FeedLive do
           params={@params}
           paginate={:cursor}
           per_page={10}
+          export_tab?
+          export_limit={100}
         >
           <:col field={:id} />
           <:col field={:name} />

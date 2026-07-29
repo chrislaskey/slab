@@ -186,9 +186,35 @@ defmodule Slab do
       given — see the next section
     * a **Share** tab appears when `share_tab?` is set and `uri` is given,
       holding a copyable link to the exact current view
+    * an **Export** tab appears when `export_tab?` is set — see
+      [Exporting](#module-exporting)
 
   No qualifying tabs, no tab bar. `tabs/1`, `share/1`, and `filter/1`
   remain public for composing custom layouts outside the table.
+
+  ### Exporting
+
+  The Export tab downloads the table as CSV, generated server-side and
+  delivered through the browser — no extra routes or setup. Two buttons:
+
+    * **Download current page** — the rows exactly as displayed
+    * **Download all data** — the first `export_limit` rows (default 1000)
+      of the current filtered, sorted result; when the total exceeds the
+      limit the button reads "Download first N rows" instead
+
+  Exports honor the current filters, sort, and column selection. Columns
+  render their raw field values (see `Slab.Export.csv/2` for the value
+  formats); virtual columns without a `field` — like action links — are
+  skipped. The file travels over the LiveView socket, so keep
+  `export_limit` in the thousands, not the millions:
+
+      <Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo}
+        paginate={:page} export_tab? export_limit={5000} uri={@uri} params={@params}>
+        <:col field={:name} />
+      </Slab.table>
+
+  The download button uses a colocated hook — register Slab's hooks once in
+  `assets/js/app.js` (see the README's installation section).
 
   ### Column visibility and order
 
@@ -343,6 +369,20 @@ defmodule Slab do
         "toggle and reorder columns via the columns[] URL param"
   )
 
+  attr(:export_tab?, :boolean,
+    default: false,
+    doc:
+      "shows the Export tab above the table, offering CSV downloads of the " <>
+        "current page or the first export_limit rows of the filtered result"
+  )
+
+  attr(:export_limit, :integer,
+    default: 1000,
+    doc:
+      "maximum rows in a full-data export; the download travels over the " <>
+        "LiveView socket, so keep it modest"
+  )
+
   slot :col, required: true, doc: "one slot per column" do
     attr(:field, :any,
       doc: "the record field to render; optional for virtual columns with a body"
@@ -417,6 +457,8 @@ defmodule Slab do
       per_page_options={@per_page_options}
       share_tab?={@share_tab?}
       columns_tab?={@columns_tab?}
+      export_tab?={@export_tab?}
+      export_limit={@export_limit}
       col={@col}
     />
     """
@@ -700,20 +742,20 @@ defmodule Slab do
     <div id={@id} data-slab-share class="flex items-center gap-x-3">
       <div class="whitespace-nowrap text-sm text-zinc-700">Share URL</div>
       <div class="w-full flex gap-x-2">
-        <form class="border border-gray-200 rounded w-full">
+        <form class="w-full flex items-center min-h-10 rounded-lg border border-zinc-300 bg-white focus-within:border-cyan-600">
           <input
             type="text"
             readonly
             value={@uri}
             data-slab-share-url
-            class="m-0 py-1 px-4 w-full text-sm border-0 rounded bg-white text-zinc-700 outline-0 focus:outline-none"
+            class="m-0 py-1 px-4 w-full text-sm border-0 rounded-lg bg-transparent text-zinc-700 outline-0 focus:ring-0 focus:outline-none"
           />
         </form>
         <button
           id={"#{@id}-copy"}
           phx-hook=".CopyToClipboard"
           type="button"
-          class="px-2 flex gap-x-1 items-center justify-center bg-white whitespace-nowrap text-sm border border-gray-200 rounded hover:text-cyan-600"
+          class="min-h-10 px-4 flex gap-x-1 items-center justify-center bg-white whitespace-nowrap text-sm text-zinc-700 border border-zinc-300 rounded-lg hover:text-cyan-600"
         >
           <.icon type="clipboard-outline" class="h-4 w-4 text-cyan-600" />
           <span data-slab-copy-label>Copy to clipboard</span>

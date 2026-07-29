@@ -41,6 +41,7 @@ defmodule DemoWeb.UsersLive do
           per_page={10}
           columns_tab?
           share_tab?
+          export_tab?
         >
           <:col field={:id} sortable />
           <:col

@@ -49,7 +49,9 @@ defmodule Slab.Live do
       |> assign(:checked_ids_lookup, checked_ids_lookup)
       |> assign(:count_inputs, count_inputs)
       |> assign(:data, data)
+      |> assign(:export_limit, Map.get(assigns, :export_limit, 1000))
       |> assign(:field_types, field_types)
+      |> assign(:list_data, if(is_list(Map.get(assigns, :data)), do: Map.get(assigns, :data)))
       |> assign(:params, params)
       |> assign(:query_inputs, query_inputs)
       |> assign(:sort, Map.get(params, "sort"))
@@ -131,6 +133,7 @@ defmodule Slab.Live do
     |> assign(:filter_tab?, filter_tab?)
     |> assign(:columns_tab?, columns_tab?)
     |> assign(:share_tab?, share_tab?)
+    |> assign(:export_tab?, Map.get(assigns, :export_tab?, false))
     |> assign(:column_options, column_options(cols))
     |> assign(:columns_count, if(is_list(columns_param), do: length(columns_param), else: 0))
     |> assign(:filter_count, Slab.get_filter_count(params))
@@ -429,7 +432,7 @@ defmodule Slab.Live do
   def render(assigns) do
     ~H"""
     <div>
-      <div :if={@filter_tab? || @columns_tab? || @share_tab?} class="-mb-4">
+      <div :if={@filter_tab? || @columns_tab? || @share_tab? || @export_tab?} class="-mb-4">
         <Slab.tabs id={"#{@id}-tabs"} flush_bottom?>
           <:tab :if={@filter_tab?} label="Filters" icon="funnel-outline" count={@filter_count}>
             <div class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4">
@@ -465,6 +468,55 @@ defmodule Slab.Live do
           </:tab>
           <:tab :if={@share_tab?} label="Share" icon="bookmark-outline" count={@share_count}>
             <Slab.share id={"#{@id}-share"} uri={@uri} />
+          </:tab>
+          <:tab :if={@export_tab?} label="Export" icon="arrow-down-tray-outline">
+            <div
+              id={"#{@id}-export"}
+              phx-hook=".Download"
+              data-slab-id={@id}
+              class="flex items-center gap-x-3"
+            >
+              <div class="whitespace-nowrap text-sm text-zinc-700">Export CSV</div>
+              <div class="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  phx-target={@myself}
+                  phx-click="export-current"
+                  class={export_button_class()}
+                >
+                  <.icon type="arrow-down-tray-outline" class="h-4 w-4 text-cyan-600" />
+                  Download current page
+                </button>
+                <button
+                  :if={@paginate}
+                  type="button"
+                  phx-target={@myself}
+                  phx-click="export-limit"
+                  phx-disable-with="Preparing download..."
+                  class={export_button_class()}
+                >
+                  <.icon type="arrow-down-tray-outline" class="h-4 w-4 text-cyan-600" />
+                  {export_all_label(@total, @export_limit)}
+                </button>
+              </div>
+              <script :type={Phoenix.LiveView.ColocatedHook} name=".Download">
+                export default {
+                  mounted() {
+                    this.handleEvent(`slab-download-${this.el.dataset.slabId}`, ({filename, content, mime}) => {
+                      const blob = new Blob([content], {type: mime || "text/csv;charset=utf-8"})
+                      const url = URL.createObjectURL(blob)
+                      const anchor = document.createElement("a")
+                      anchor.href = url
+                      anchor.download = filename
+                      document.body.appendChild(anchor)
+                      anchor.click()
+                      anchor.remove()
+                      URL.revokeObjectURL(url)
+                    })
+                  }
+                }
+              </script>
+            </div>
           </:tab>
         </Slab.tabs>
       </div>
@@ -645,6 +697,14 @@ defmodule Slab.Live do
     {:noreply, push_patch(socket, to: to)}
   end
 
+  def handle_event("export-current", _params, socket) do
+    {:noreply, push_download(socket, socket.assigns.data)}
+  end
+
+  def handle_event("export-limit", _params, socket) do
+    {:noreply, push_download(socket, export_records(socket.assigns))}
+  end
+
   def handle_event("toggle-checkbox-for-all", _params, socket) do
     current_ids =
       Enum.map(socket.assigns.data, fn record -> to_string(Map.get(record, :id)) end)
@@ -673,6 +733,60 @@ defmodule Slab.Live do
       end
 
     {:noreply, push_patch(socket, to: checked_path(socket.assigns.uri, updated))}
+  end
+
+  # Helpers - Export functions
+
+  # In list mode the full list is already in memory; in query mode, re-run
+  # the current filtered, sorted query from the top, capped at export_limit —
+  # pagination params are dropped so the export always starts at record one.
+  defp export_records(%{list_data: list} = assigns) when is_list(list) do
+    Enum.take(list, assigns.export_limit)
+  end
+
+  defp export_records(assigns) do
+    params = Map.drop(assigns.params, ["page", "per_page", "after"])
+
+    opts = %{
+      sortable_fields: sortable_fields(assigns.col),
+      filterable_cols: filterable_cols(assigns.col),
+      paginate: :page,
+      per_page: assigns.export_limit,
+      max_per_page: assigns.export_limit
+    }
+
+    {records, _has_next?} = Slab.Query.fetch(assigns.schema, assigns.repo, params, opts)
+    records
+  end
+
+  defp push_download(socket, records) do
+    csv = Slab.Export.csv(records, export_columns(socket.assigns.visible_cols))
+
+    # The BOM makes Excel read the CSV as UTF-8
+    push_event(socket, "slab-download-#{socket.assigns.id}", %{
+      filename: "#{socket.assigns.id}-#{Date.utc_today()}.csv",
+      content: "\uFEFF" <> csv,
+      mime: "text/csv;charset=utf-8"
+    })
+  end
+
+  # Exports carry the visible columns in their current order; virtual
+  # columns without a field (like action links) have no exportable value
+  defp export_columns(cols) do
+    for col <- cols, is_atom(col[:field]) && col[:field] do
+      {column_label(col), col.field}
+    end
+  end
+
+  defp export_all_label(total, limit) when is_integer(total) and total <= limit do
+    "Download all data"
+  end
+
+  defp export_all_label(_total, limit), do: "Download first #{limit} rows"
+
+  defp export_button_class do
+    "min-h-10 px-4 flex gap-x-1 items-center justify-center bg-white whitespace-nowrap " <>
+      "text-sm text-zinc-700 border border-zinc-300 rounded-lg hover:text-cyan-600"
   end
 
   # Helpers - Checkable functions
