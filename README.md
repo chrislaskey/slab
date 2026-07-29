@@ -79,7 +79,25 @@ Every piece is explained feature-by-feature in the [Usage guide](guides/usage.md
 and there is a runnable demo app in `examples/` (see
 [Development](guides/development.md)).
 
-## Documentation
+## Demo app
+
+The `/examples` directory contains a full Phoenix demo app exercising every
+feature — page and cursor pagination, filters, tabs, exports, and inline
+editing:
+
+```
+git clone https://github.com/chrislaskey/slab.git
+cd slab/examples/demo
+mix setup && iex -S mix phx.server
+```
+
+The demo is generated: `examples/regenerate.sh` rebuilds it from a pinned
+`phx.new` release, then applies the version-controlled `examples/overlay/`
+directory on top. The interesting demo code — LiveViews, schema, seeds,
+layout tweaks — lives in the overlay; edit there, copy over the demo
+(`cp -R overlay/. demo/`), and never edit generated files directly.
+
+## Additional documentation
 
 - **[Usage](guides/usage.md)** — every feature in depth: data modes, sorting,
   filtering (including external filter UIs), pagination, tabs, exporting,
