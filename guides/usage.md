@@ -1,5 +1,30 @@
 # Usage
 
+## Architecture
+
+A table is composed from Phoenix Component slots — every region is declared by the
+presence of a slot, and nothing renders that wasn't declared. Common slots include:
+
+- **`<:column>`** — automatic table rendering based on Ecto schema field types
+  with support for custom rendering.
+- **`<:column_checkbox>`** — checkbox row selection.
+- **`<:pagination>`** — supports either offset or keyset pagination.
+- **`<:tab>`** — a tab bar above the table: Filters, Columns, Share, Export,
+  or fully custom tabs, in declaration order.
+- **`<:filter>`** — declarative, whitelisted filtering driven by `filter[...]`
+  URL params, with ready-made inputs.
+
+Supports automatic database querying (including sorting and filtering) or simply
+render data passed in as a list.
+
+Table state lives in query params in the URL, persisting views across reloads
+and making it easy to share.
+
+Supports custom rendering of fields, inline editing, sorting, pagination, 
+filtering, dynamic column ordering.
+
+## Overview
+
 Render a table with `Slab.table/1`, defining columns as `<:column>` slots.
 Data comes from one of two modes.
 

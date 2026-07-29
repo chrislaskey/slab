@@ -4,27 +4,82 @@
 
 # Slab
 
-> A data table component for Phoenix LiveView.
+> A composable data table component for Phoenix LiveView.
 
-A table is composed from slots — every optional region is declared by the
-presence of a slot, and nothing renders that wasn't declared:
+## Architecture
 
-- **`<:column>`** — automatic cell rendering based on Ecto schema field types
-  (booleans render as check/x icons, datetimes with absolute and relative
-  formats, UUIDs truncated with a full-value hover tooltip, maps as code
-  blocks), custom bodies, URL-driven sorting, and inline editing.
-- **`<:column_checkbox>`** — row selection stored in the URL query string, so
-  selections survive navigation, pagination, and refreshes — and are
-  shareable as links.
-- **`<:filter>`** — declarative, whitelisted filtering driven by `filter[...]`
-  URL params, with ready-made inputs.
+Slab is composed from Phoenix Component slots — every region is declared by the
+presence of a slot, and nothing renders that wasn't declared. Common slots include:
+
+- **`<:column>`** — automatic table rendering based on Ecto schema field types
+  with support for custom rendering.
+- **`<:column_checkbox>`** — checkbox row selection.
+- **`<:pagination>`** — supports either offset or keyset pagination.
 - **`<:tab>`** — a tab bar above the table: Filters, Columns, Share, Export,
   or fully custom tabs, in declaration order.
-- **`<:pagination>`** — offset or keyset pagination.
+- **`<:filter>`** — declarative, whitelisted filtering driven by `filter[...]`
+  URL params, with ready-made inputs.
 
-Table state lives in the URL: the component patches query params, and the
-parent LiveView reacts to `handle_params/3` by requerying. Callers pass in the
-current `uri` and `params` to enable these features.
+Supports automatic database querying (including sorting and filtering) or simply
+render data passed in as a list.
+
+Table state lives in query params in the URL, persisting views across reloads
+and making it easy to share.
+
+Supports custom rendering of fields, inline editing, sorting, pagination, 
+filtering, dynamic column ordering.
+
+## Examples
+
+Slab can render a simple table over records you already have, with sortable columns —
+sorting patches `sort` params onto the URL, and the LiveView requeries in
+`handle_params/3`:
+
+```heex
+<Slab.table id="users-table" data={@users} uri={@uri} params={@params}>
+  <:column field={:name} sortable />
+  <:column field={:inserted_at} />
+</Slab.table>
+```
+
+Or it can render a complex UI including querying your database with querying, filtering, and sorting.
+In the UI, all state is stored in query params in the URL. These drive
+filtering, sorting, pagination, column layout, selection, exports, tabs, and inline
+editing:
+
+```heex
+<Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo}
+  uri={@uri} params={@params} on_save={&save_user/2}>
+  <:tab name="filters" />
+  <:tab name="columns" />
+  <:tab name="share" />
+  <:tab name="export" limit={1000} />
+  <:tab name="custom" label="Custom">Custom tab content</:tab>
+
+  <:filter field={:name} placeholder="Search names..." min_chars={2} />
+  <:filter field={:role} type="multiselect" />
+  <:filter field={:organization} query={&filter_by_organization/2} />
+
+  <:column_checkbox />
+  <:column field={:name} sortable editable />
+  <:column field={:role} sortable />
+  <:column field={:email} optional />
+
+  <:column :let={user} label="Products" export_value={&products_export/1}>
+    {Enum.map_join(user.products, ", ", & &1.name)}
+  </:column>
+
+  <:column :let={user} label="Actions">
+    <.link navigate={~p"/users/#{user}/edit"}>Edit</.link>
+  </:column>
+
+  <:pagination mode={:page} per_page={25} />
+</Slab.table>
+```
+
+Every piece is explained feature-by-feature in the [Usage guide](guides/usage.md),
+and there is a runnable demo app in `examples/` (see
+[Development](guides/development.md)).
 
 ## Installation
 
@@ -78,58 +133,6 @@ content: [
   "../deps/phoenix_select/lib/**/*.ex",
 ],
 ```
-
-## Examples
-
-Start small: a table over records you already have, with sortable columns —
-sorting patches `sort` params onto the URL, and the LiveView requeries in
-`handle_params/3`:
-
-```heex
-<Slab.table id="users-table" data={@users} uri={@uri} params={@params}>
-  <:column field={:name} sortable />
-  <:column field={:email} />
-  <:column field={:inserted_at} sortable />
-</Slab.table>
-```
-
-And everything at once — query mode, where Slab fetches through your repo
-and the URL drives filtering, sorting, pagination, column layout, selection,
-exports, and inline editing:
-
-```heex
-<Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo}
-  uri={@uri} params={@params} on_save={&save_user/2}>
-  <:tab name="filters" />
-  <:tab name="columns" />
-  <:tab name="share" />
-  <:tab name="export" limit={5000} />
-  <:tab name="help" label="Help" icon="bookmark-outline">
-    <p>Contact #data-team for access questions.</p>
-  </:tab>
-
-  <:filter field={:name} placeholder="Search names..." min_chars={2} />
-  <:filter field={:role} type="multiselect" />
-  <:filter field={:organization} query={&filter_by_organization/2} />
-
-  <:column_checkbox />
-  <:column field={:name} sortable editable />
-  <:column field={:role} sortable />
-  <:column field={:email} optional />
-  <:column :let={user} label="Products" export_value={&products_export/1}>
-    {Enum.map_join(user.products, ", ", & &1.name)}
-  </:column>
-  <:column :let={user} label="Actions">
-    <.link navigate={~p"/users/#{user}/edit"}>Edit</.link>
-  </:column>
-
-  <:pagination mode={:page} per_page={25} />
-</Slab.table>
-```
-
-Every piece is explained feature-by-feature in the [Usage guide](guides/usage.md),
-and there is a runnable demo app in `examples/` (see
-[Development](guides/development.md)).
 
 ## Documentation
 
