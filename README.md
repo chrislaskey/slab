@@ -79,6 +79,18 @@ Every piece is explained feature-by-feature in the [Usage guide](guides/usage.md
 and there is a runnable demo app in `examples/` (see
 [Development](guides/development.md)).
 
+## Documentation
+
+- **[Usage](guides/usage.md)** — every feature in depth: data modes, sorting,
+  filtering (including external filter UIs), pagination, tabs, exporting,
+  column visibility, row selection, and inline editing
+- **[Reference](guides/reference.md)** — quick tables for every attribute,
+  slot, URL param, and helper function
+- **[Development](guides/development.md)** — the demo app, architecture
+  notes, testing, and releasing
+- **[HexDocs](https://hexdocs.pm/slab)** — generated API documentation,
+  including these guides
+
 ## Installation
 
 Add `slab` to your dependencies in `mix.exs` (requires LiveView `~> 1.1`):
@@ -131,18 +143,6 @@ content: [
   "../deps/phoenix_select/lib/**/*.ex",
 ],
 ```
-
-## Documentation
-
-- **[Usage](guides/usage.md)** — every feature in depth: data modes, sorting,
-  filtering (including external filter UIs), pagination, tabs, exporting,
-  column visibility, row selection, and inline editing
-- **[Reference](guides/reference.md)** — quick tables for every attribute,
-  slot, URL param, and helper function
-- **[Development](guides/development.md)** — the demo app, architecture
-  notes, testing, and releasing
-- **[HexDocs](https://hexdocs.pm/slab)** — generated API documentation,
-  including these guides
 
 ## License
 
