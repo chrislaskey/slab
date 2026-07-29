@@ -65,8 +65,8 @@ defmodule SlabTest do
           fn assigns ->
             ~H"""
             <Slab.table id="test-table" data={@data}>
-              <:col field={:id} />
-              <:col field={:first_name} />
+              <:column field={:id} />
+              <:column field={:first_name} />
             </Slab.table>
             """
           end,
@@ -98,12 +98,12 @@ defmodule SlabTest do
           fn assigns ->
             ~H"""
             <Slab.table id="test-table" data={@data} schema={SlabTest.User}>
-              <:col field={:id} />
-              <:col field={:name} />
-              <:col field={:active} />
-              <:col field={:inserted_at} />
-              <:col field={:metadata} />
-              <:col field={:tags} />
+              <:column field={:id} />
+              <:column field={:name} />
+              <:column field={:active} />
+              <:column field={:inserted_at} />
+              <:column field={:metadata} />
+              <:column field={:tags} />
             </Slab.table>
             """
           end,
@@ -135,8 +135,8 @@ defmodule SlabTest do
           fn assigns ->
             ~H"""
             <Slab.table id="test-table" data={@data}>
-              <:col :let={user} field={:name}>{String.upcase(user.name)}</:col>
-              <:col :let={user} label="Actions">Edit {user.name}</:col>
+              <:column :let={user} field={:name}>{String.upcase(user.name)}</:column>
+              <:column :let={user} label="Actions">Edit {user.name}</:column>
             </Slab.table>
             """
           end,
@@ -157,7 +157,7 @@ defmodule SlabTest do
           fn assigns ->
             ~H"""
             <Slab.table id="test-table" data={@data}>
-              <:col field={:name} label="Full Name" />
+              <:column field={:name} label="Full Name" />
             </Slab.table>
             """
           end,
@@ -174,8 +174,8 @@ defmodule SlabTest do
           fn assigns ->
             ~H"""
             <Slab.table id="test-table" data={@data} uri={@uri} params={@params}>
-              <:col field={:name} sortable />
-              <:col field={:email} />
+              <:column field={:name} sortable />
+              <:column field={:email} />
             </Slab.table>
             """
           end,
@@ -201,7 +201,7 @@ defmodule SlabTest do
           fn assigns ->
             ~H"""
             <Slab.table id="test-table" data={@data}>
-              <:col field={:name} sortable />
+              <:column field={:name} sortable />
             </Slab.table>
             """
           end,
@@ -211,14 +211,17 @@ defmodule SlabTest do
       refute html =~ "data-phx-link"
       assert html =~ "Name"
     end
+  end
 
-    test "renders checkboxes when checkable" do
+  describe "table/1 row selection" do
+    test "renders checkboxes as the first column when declared" do
       html =
         render_component(
           fn assigns ->
             ~H"""
-            <Slab.table id="test-table" data={@data} checkable? uri={@uri}>
-              <:col field={:name} />
+            <Slab.table id="test-table" data={@data} uri={@uri}>
+              <:column_checkbox />
+              <:column field={:name} />
             </Slab.table>
             """
           end,
@@ -229,15 +232,18 @@ defmodule SlabTest do
       assert html =~ "toggle-checkbox-for-all"
       assert html =~ "toggle-checkbox-for-row"
       assert html =~ ~s(name="checked_row")
+
+      # First column: the select-all checkbox renders before the Name header
+      assert html =~ ~r{checked_all.*Name}s
     end
 
-    test "does not render checkboxes without a uri" do
+    test "does not render checkboxes without the slot" do
       html =
         render_component(
           fn assigns ->
             ~H"""
-            <Slab.table id="test-table" data={@data} checkable?>
-              <:col field={:name} />
+            <Slab.table id="test-table" data={@data} uri="https://example.com/users">
+              <:column field={:name} />
             </Slab.table>
             """
           end,
@@ -245,6 +251,22 @@ defmodule SlabTest do
         )
 
       refute html =~ "toggle-checkbox-for-row"
+    end
+
+    test "raises without a uri" do
+      assert_raise ArgumentError, ~r/column_checkbox> requires uri/, fn ->
+        render_component(
+          fn assigns ->
+            ~H"""
+            <Slab.table id="test-table" data={@data}>
+              <:column_checkbox />
+              <:column field={:name} />
+            </Slab.table>
+            """
+          end,
+          data: [%{id: 1, name: "Ada"}]
+        )
+      end
     end
   end
 
@@ -255,8 +277,8 @@ defmodule SlabTest do
           fn assigns ->
             ~H"""
             <Slab.table id="test-table" schema={SlabTest.User} repo={SlabTest.FakeRepo}>
-              <:col field={:name} />
-              <:col field={:active} />
+              <:column field={:name} />
+              <:column field={:active} />
             </Slab.table>
             """
           end,
@@ -277,7 +299,7 @@ defmodule SlabTest do
           fn assigns ->
             ~H"""
             <Slab.table id="test-table" schema={@query} repo={SlabTest.FakeRepo}>
-              <:col field={:active} />
+              <:column field={:active} />
             </Slab.table>
             """
           end,
@@ -293,7 +315,7 @@ defmodule SlabTest do
         fn assigns ->
           ~H"""
           <Slab.table id="test-table" schema={SlabTest.User} repo={SlabTest.FakeRepo} uri={@uri} params={@params}>
-            <:col field={:name} sortable />
+            <:column field={:name} sortable />
           </Slab.table>
           """
         end,
@@ -310,7 +332,7 @@ defmodule SlabTest do
         fn assigns ->
           ~H"""
           <Slab.table id="test-table" schema={SlabTest.User} repo={SlabTest.FakeRepo} uri={@uri} params={@params}>
-            <:col field={:name} />
+            <:column field={:name} />
           </Slab.table>
           """
         end,
@@ -330,8 +352,7 @@ defmodule SlabTest do
         repo: FakeRepo,
         uri: nil,
         params: %{},
-        checkable?: false,
-        col: [%{field: :name}]
+        column: [%{field: :name}]
       }
 
       {:ok, socket} = Slab.Live.update(assigns, %Phoenix.LiveView.Socket{})
@@ -341,7 +362,12 @@ defmodule SlabTest do
       refute_received {:repo_all, _query}
 
       # Changing a query input triggers a refetch
-      sorted = %{assigns | params: %{"sort" => "name"}, col: [%{field: :name, sortable: true}]}
+      sorted = %{
+        assigns
+        | params: %{"sort" => "name"},
+          column: [%{field: :name, sortable: true}]
+      }
+
       {:ok, _socket} = Slab.Live.update(sorted, socket)
       assert_received {:repo_all, _query}
     end
@@ -355,7 +381,7 @@ defmodule SlabTest do
           fn assigns ->
             ~H"""
             <Slab.table id="test-table" schema={SlabTest.User}>
-              <:col field={:name} />
+              <:column field={:name} />
             </Slab.table>
             """
           end,
@@ -372,7 +398,7 @@ defmodule SlabTest do
           fn assigns ->
             ~H"""
             <Slab.table id="test-table">
-              <:col field={:name} />
+              <:column field={:name} />
             </Slab.table>
             """
           end,
@@ -387,7 +413,7 @@ defmodule SlabTest do
           fn assigns ->
             ~H"""
             <Slab.table id="test-table" schema={SlabTest.User}>
-              <:col field={:name} />
+              <:column field={:name} />
             </Slab.table>
             """
           end,
@@ -402,7 +428,7 @@ defmodule SlabTest do
           fn assigns ->
             ~H"""
             <Slab.table id="test-table" data={@data} repo={SlabTest.FakeRepo}>
-              <:col field={:name} />
+              <:column field={:name} />
             </Slab.table>
             """
           end,
@@ -413,7 +439,7 @@ defmodule SlabTest do
   end
 
   describe "table/1 filtering" do
-    defp render_filter_table(params, col_opts) do
+    defp render_filter_table(params, filter_opts) do
       render_component(
         fn assigns ->
           ~H"""
@@ -424,22 +450,19 @@ defmodule SlabTest do
             uri={@uri}
             params={@params}
           >
-            <:col
-              field={@col_opts[:field]}
-              filterable={@col_opts[:filterable] || false}
-              filter_query={@col_opts[:filter_query]}
-            />
+            <:filter :if={@filter_opts != []} field={@filter_opts[:field]} query={@filter_opts[:query]} />
+            <:column field={:name} />
           </Slab.table>
           """
         end,
         uri: "https://example.com/users",
         params: params,
-        col_opts: col_opts
+        filter_opts: filter_opts
       )
     end
 
     test "string fields filter with case-insensitive contains" do
-      render_filter_table(%{"filter" => %{"name" => "Ada"}}, field: :name, filterable: true)
+      render_filter_table(%{"filter" => %{"name" => "Ada"}}, field: :name)
 
       assert_received {:repo_all, %Ecto.Query{wheres: [where]}}
       # Portable case-insensitive LIKE, not Postgres-only ilike
@@ -449,14 +472,14 @@ defmodule SlabTest do
     end
 
     test "escapes LIKE wildcards in user input" do
-      render_filter_table(%{"filter" => %{"name" => "10%_x"}}, field: :name, filterable: true)
+      render_filter_table(%{"filter" => %{"name" => "10%_x"}}, field: :name)
 
       assert_received {:repo_all, %Ecto.Query{wheres: [where]}}
       assert Enum.any?(where.params, fn {value, _type} -> value == "%10\\%\\_x%" end)
     end
 
     test "non-string fields cast and filter by equality" do
-      render_filter_table(%{"filter" => %{"active" => "true"}}, field: :active, filterable: true)
+      render_filter_table(%{"filter" => %{"active" => "true"}}, field: :active)
 
       assert_received {:repo_all, %Ecto.Query{wheres: [where]}}
       assert inspect(where.expr) =~ "=="
@@ -464,27 +487,25 @@ defmodule SlabTest do
     end
 
     test "values that fail casting are ignored" do
-      render_filter_table(
-        %{"filter" => %{"active" => "banana"}},
-        field: :active,
-        filterable: true
-      )
+      render_filter_table(%{"filter" => %{"active" => "banana"}}, field: :active)
 
       assert_received {:repo_all, SlabTest.User}
     end
 
-    test "fields not declared filterable are ignored" do
-      render_filter_table(%{"filter" => %{"name" => "ada"}}, field: :name)
+    test "fields without a filter declaration are ignored" do
+      render_filter_table(%{"filter" => %{"name" => "ada"}}, [])
 
       assert_received {:repo_all, SlabTest.User}
+    end
+
+    test "filters apply on fields that are not columns" do
+      render_filter_table(%{"filter" => %{"active" => "true"}}, field: :active)
+
+      assert_received {:repo_all, %Ecto.Query{wheres: [_where]}}
     end
 
     test "list values filter with IN" do
-      render_filter_table(
-        %{"filter" => %{"name" => ["Ada", "Grace"]}},
-        field: :name,
-        filterable: true
-      )
+      render_filter_table(%{"filter" => %{"name" => ["Ada", "Grace"]}}, field: :name)
 
       assert_received {:repo_all, %Ecto.Query{wheres: [where]}}
       assert inspect(where.expr) =~ "in"
@@ -492,22 +513,14 @@ defmodule SlabTest do
     end
 
     test "list values that fail casting are dropped from IN" do
-      render_filter_table(
-        %{"filter" => %{"active" => ["true", "banana", ""]}},
-        field: :active,
-        filterable: true
-      )
+      render_filter_table(%{"filter" => %{"active" => ["true", "banana", ""]}}, field: :active)
 
       assert_received {:repo_all, %Ecto.Query{wheres: [where]}}
       assert Enum.any?(where.params, fn {value, _type} -> value == [true] end)
     end
 
     test "list values with no castable members are ignored" do
-      render_filter_table(
-        %{"filter" => %{"active" => ["banana"]}},
-        field: :active,
-        filterable: true
-      )
+      render_filter_table(%{"filter" => %{"active" => ["banana"]}}, field: :active)
 
       assert_received {:repo_all, SlabTest.User}
     end
@@ -515,8 +528,7 @@ defmodule SlabTest do
     test "operator maps apply comparison conditions" do
       render_filter_table(
         %{"filter" => %{"inserted_at" => %{"gte" => "2026-01-02T00:00:00Z"}}},
-        field: :inserted_at,
-        filterable: true
+        field: :inserted_at
       )
 
       assert_received {:repo_all, %Ecto.Query{wheres: [where]}}
@@ -526,14 +538,13 @@ defmodule SlabTest do
     test "unknown operators are ignored" do
       render_filter_table(
         %{"filter" => %{"inserted_at" => %{"drop_table" => "x"}}},
-        field: :inserted_at,
-        filterable: true
+        field: :inserted_at
       )
 
       assert_received {:repo_all, SlabTest.User}
     end
 
-    test "custom filter functions receive the queryable and raw value" do
+    test "custom query functions receive the queryable and raw value" do
       test_pid = self()
 
       custom = fn queryable, value ->
@@ -541,11 +552,43 @@ defmodule SlabTest do
         queryable
       end
 
-      # No filterable attr — a filter function implies it
-      render_filter_table(%{"filter" => %{"name" => "ada"}}, field: :name, filter_query: custom)
+      render_filter_table(%{"filter" => %{"name" => "ada"}}, field: :name, query: custom)
 
       assert_received {:custom_filter, "ada"}
       assert_received {:repo_all, SlabTest.User}
+    end
+
+    test "raises on duplicate filter fields" do
+      assert_raise ArgumentError, ~r/duplicate <:filter> fields/, fn ->
+        render_component(
+          fn assigns ->
+            ~H"""
+            <Slab.table id="test-table" schema={SlabTest.User} repo={SlabTest.FakeRepo}>
+              <:filter field={:name} />
+              <:filter field={:name} type="hidden" />
+              <:column field={:name} />
+            </Slab.table>
+            """
+          end,
+          %{}
+        )
+      end
+    end
+
+    test "raises on a query function with the wrong arity" do
+      assert_raise ArgumentError, ~r/2-arity function/, fn ->
+        render_component(
+          fn assigns ->
+            ~H"""
+            <Slab.table id="test-table" schema={SlabTest.User} repo={SlabTest.FakeRepo}>
+              <:filter field={:name} query={fn queryable -> queryable end} />
+              <:column field={:name} />
+            </Slab.table>
+            """
+          end,
+          %{}
+        )
+      end
     end
   end
 
@@ -576,12 +619,11 @@ defmodule SlabTest do
               id="test-table"
               schema={SlabTest.User}
               repo={SlabTest.FakeRepo}
-              paginate={:page}
-              per_page={2}
               uri={@uri}
               params={@params}
             >
-              <:col field={:name} />
+              <:column field={:name} />
+              <:pagination mode={:page} per_page={2} />
             </Slab.table>
             """
           end,
@@ -633,12 +675,11 @@ defmodule SlabTest do
               id="test-table"
               schema={SlabTest.User}
               repo={SlabTest.FakeRepo}
-              paginate={:page}
-              per_page={2}
               uri={@uri}
               params={@params}
             >
-              <:col field={:name} />
+              <:column field={:name} />
+              <:pagination mode={:page} per_page={2} />
             </Slab.table>
             """
           end,
@@ -663,8 +704,9 @@ defmodule SlabTest do
         render_component(
           fn assigns ->
             ~H"""
-            <Slab.table id="test-table" data={@data} paginate={:page} per_page={2} uri={@uri} params={@params}>
-              <:col field={:name} />
+            <Slab.table id="test-table" data={@data} uri={@uri} params={@params}>
+              <:column field={:name} />
+              <:pagination mode={:page} per_page={2} />
             </Slab.table>
             """
           end,
@@ -691,8 +733,9 @@ defmodule SlabTest do
         render_component(
           fn assigns ->
             ~H"""
-            <Slab.table id="test-table" data={@data} paginate={:page} per_page={2} uri={@uri} params={@params}>
-              <:col field={:name} />
+            <Slab.table id="test-table" data={@data} uri={@uri} params={@params}>
+              <:column field={:name} />
+              <:pagination mode={:page} per_page={2} />
             </Slab.table>
             """
           end,
@@ -715,9 +758,9 @@ defmodule SlabTest do
         repo: FakeRepo,
         uri: "https://example.com/users",
         params: %{},
-        checkable?: false,
-        paginate: :page,
-        col: [%{field: :name, sortable: true, filterable: true}]
+        pagination: [%{mode: :page}],
+        filter: [%{field: :name}],
+        column: [%{field: :name, sortable: true}]
       }
 
       {:ok, socket} = Slab.Live.update(assigns, %Phoenix.LiveView.Socket{})
@@ -744,12 +787,46 @@ defmodule SlabTest do
     end
 
     test "raises when paginating without a uri" do
-      assert_raise ArgumentError, ~r/pagination requires uri/, fn ->
+      assert_raise ArgumentError, ~r/pagination> requires uri/, fn ->
         render_component(
           fn assigns ->
             ~H"""
-            <Slab.table id="test-table" data={[]} paginate={:page}>
-              <:col field={:name} />
+            <Slab.table id="test-table" data={[]}>
+              <:column field={:name} />
+              <:pagination mode={:page} />
+            </Slab.table>
+            """
+          end,
+          %{}
+        )
+      end
+    end
+
+    test "raises without a pagination mode" do
+      assert_raise ArgumentError, ~r/requires a mode/, fn ->
+        render_component(
+          fn assigns ->
+            ~H"""
+            <Slab.table id="test-table" data={[]} uri="https://example.com/users">
+              <:column field={:name} />
+              <:pagination />
+            </Slab.table>
+            """
+          end,
+          %{}
+        )
+      end
+    end
+
+    test "raises on more than one pagination slot" do
+      assert_raise ArgumentError, ~r/at most one <:pagination>/, fn ->
+        render_component(
+          fn assigns ->
+            ~H"""
+            <Slab.table id="test-table" data={[]} uri="https://example.com/users">
+              <:column field={:name} />
+              <:pagination mode={:page} />
+              <:pagination mode={:page} />
             </Slab.table>
             """
           end,
@@ -769,12 +846,11 @@ defmodule SlabTest do
               id="test-table"
               schema={SlabTest.User}
               repo={SlabTest.FakeRepo}
-              paginate={:cursor}
-              per_page={2}
               uri={@uri}
               params={@params}
             >
-              <:col field={:name} />
+              <:column field={:name} />
+              <:pagination mode={:cursor} per_page={2} />
             </Slab.table>
             """
           end,
@@ -805,12 +881,11 @@ defmodule SlabTest do
               id="test-table"
               schema={SlabTest.User}
               repo={SlabTest.FakeRepo}
-              paginate={:cursor}
-              per_page={2}
               uri={@uri}
               params={@params}
             >
-              <:col field={:name} />
+              <:column field={:name} />
+              <:pagination mode={:cursor} per_page={2} />
             </Slab.table>
             """
           end,
@@ -833,12 +908,11 @@ defmodule SlabTest do
             id="test-table"
             schema={SlabTest.User}
             repo={SlabTest.FakeRepo}
-            paginate={:cursor}
-            per_page={2}
             uri={@uri}
             params={@params}
           >
-            <:col field={:name} />
+            <:column field={:name} />
+            <:pagination mode={:cursor} per_page={2} />
           </Slab.table>
           """
         end,
@@ -859,12 +933,11 @@ defmodule SlabTest do
               id="test-table"
               schema={SlabTest.User}
               repo={SlabTest.FakeRepo}
-              paginate={:cursor}
-              per_page={2}
               uri={@uri}
               params={@params}
             >
-              <:col field={:inserted_at} sortable />
+              <:column field={:inserted_at} sortable />
+              <:pagination mode={:cursor} per_page={2} />
             </Slab.table>
             """
           end,
@@ -887,8 +960,9 @@ defmodule SlabTest do
         render_component(
           fn assigns ->
             ~H"""
-            <Slab.table id="test-table" data={[]} paginate={:cursor} uri="https://example.com/users">
-              <:col field={:name} />
+            <Slab.table id="test-table" data={[]} uri="https://example.com/users">
+              <:column field={:name} />
+              <:pagination mode={:cursor} />
             </Slab.table>
             """
           end,
@@ -898,38 +972,35 @@ defmodule SlabTest do
     end
   end
 
-  describe "table/1 derived tabs" do
-    defp render_tabs_table(attrs) do
-      render_component(
-        fn assigns ->
-          ~H"""
-          <Slab.table
-            id="test-table"
-            schema={SlabTest.User}
-            repo={SlabTest.FakeRepo}
-            uri={@uri}
-            params={@params}
-            share_tab?={@share_tab?}
-          >
-            <:col field={:name} filterable={@filterable} />
-            <:col field={:active} filterable={@filterable} />
-          </Slab.table>
-          """
-        end,
-        Map.merge(
-          %{uri: "https://example.com/users", params: %{}, share_tab?: true, filterable: true},
-          attrs
+  describe "table/1 tabs" do
+    test "renders tabs in declaration order with built-in content" do
+      html =
+        render_component(
+          fn assigns ->
+            ~H"""
+            <Slab.table
+              id="test-table"
+              schema={SlabTest.User}
+              repo={SlabTest.FakeRepo}
+              uri={@uri}
+              params={@params}
+            >
+              <:tab name="share" />
+              <:tab name="filters" />
+              <:filter field={:name} />
+              <:filter field={:active} />
+              <:column field={:name} />
+            </Slab.table>
+            """
+          end,
+          uri: "https://example.com/users",
+          params: %{"filter" => %{"name" => "ada"}}
         )
-      )
-    end
 
-    test "renders Filters and Share tabs derived from the table definition" do
-      html = render_tabs_table(%{params: %{"filter" => %{"name" => "ada"}}})
+      # Declaration order wins: Share renders before Filters
+      assert html =~ ~r{Share.*Filters}s
 
-      assert html =~ "Filters"
-      assert html =~ "Share"
-
-      # Filter inputs generated per filterable column: text for strings,
+      # Filter inputs generated per filter declaration: text for strings,
       # a True/False select for booleans
       assert html =~ ~s(id="test-table-filter-name-form")
       assert html =~ ~s(data-multiple="false")
@@ -943,28 +1014,14 @@ defmodule SlabTest do
       assert html =~ "Share URL"
       assert html =~ ~s(phx-hook="Slab.CopyToClipboard")
 
-      # Derived tabs open the panel bottom and pull the table card up into
+      # Declared tabs open the panel bottom and pull the table card up into
       # it, so the card's rounded corners overlap the panel
       assert html =~ ~s(class="-mb-4")
       assert html =~ "border-b-0 rounded-tr"
       assert html =~ "pb-10"
     end
 
-    test "omits the Filters tab when no columns are filterable" do
-      html = render_tabs_table(%{filterable: false})
-
-      refute html =~ "Filters"
-      assert html =~ "Share URL"
-    end
-
-    test "omits the Share tab by default" do
-      html = render_tabs_table(%{share_tab?: false})
-
-      assert html =~ "Filters"
-      refute html =~ "Share URL"
-    end
-
-    test "col filter_* attrs override the derived input" do
+    test "renders no tab bar without tab slots, even with filters declared" do
       html =
         render_component(
           fn assigns ->
@@ -976,13 +1033,74 @@ defmodule SlabTest do
               uri={@uri}
               params={@params}
             >
-              <:col
+              <:filter field={:name} />
+              <:column field={:name} />
+            </Slab.table>
+            """
+          end,
+          uri: "https://example.com/users",
+          params: %{"filter" => %{"name" => "ada"}}
+        )
+
+      refute html =~ "test-table-tabs"
+
+      # The filter still applies to the query — only the UI is absent
+      assert_received {:repo_all, %Ecto.Query{wheres: [_where]}}
+    end
+
+    test "hidden filters whitelist the field without rendering an input" do
+      html =
+        render_component(
+          fn assigns ->
+            ~H"""
+            <Slab.table
+              id="test-table"
+              schema={SlabTest.User}
+              repo={SlabTest.FakeRepo}
+              uri={@uri}
+              params={@params}
+            >
+              <:tab name="filters" />
+              <:filter field={:name} />
+              <:filter field={:active} type="hidden" />
+              <:column field={:name} />
+            </Slab.table>
+            """
+          end,
+          uri: "https://example.com/users",
+          params: %{"filter" => %{"active" => "true"}}
+        )
+
+      # No input for the hidden filter, but its param filtered the query
+      assert html =~ ~s(id="test-table-filter-name-form")
+      refute html =~ ~s(id="test-table-filter-active)
+      assert_received {:repo_all, %Ecto.Query{wheres: [_where]}}
+
+      # And it still counts in the badge — the badge reads params
+      assert html =~ ~r{rounded-full">\s*1\s*</div>}
+    end
+
+    test "filter attrs override the derived input" do
+      html =
+        render_component(
+          fn assigns ->
+            ~H"""
+            <Slab.table
+              id="test-table"
+              schema={SlabTest.User}
+              repo={SlabTest.FakeRepo}
+              uri={@uri}
+              params={@params}
+            >
+              <:tab name="filters" />
+              <:filter
                 field={:name}
-                filterable
-                filter_type="multiselect"
-                filter_options={[{"Ada", "ada"}, {"Grace", "grace"}]}
+                label="Full Name"
+                type="multiselect"
+                options={[{"Ada", "ada"}, {"Grace", "grace"}]}
               />
-              <:col field={:email} filterable filter_placeholder="Search emails..." />
+              <:filter field={:email} placeholder="Search emails..." />
+              <:column field={:name} />
             </Slab.table>
             """
           end,
@@ -990,7 +1108,8 @@ defmodule SlabTest do
           params: %{}
         )
 
-      # name became a multiselect with the given options
+      # name became a multiselect with the given options and label
+      assert html =~ "Full Name"
       assert html =~ ~s(data-multiple="true")
       assert html =~ ~s(data-ps-option="ada")
       assert html =~ ~s(data-ps-option="grace")
@@ -1011,7 +1130,9 @@ defmodule SlabTest do
               uri={@uri}
               params={@params}
             >
-              <:col field={:role} filterable />
+              <:tab name="filters" />
+              <:filter field={:role} />
+              <:column field={:role} />
             </Slab.table>
             """
           end,
@@ -1027,20 +1148,125 @@ defmodule SlabTest do
       assert html =~ "Admin"
     end
 
-    test "renders no tab bar without a uri and without filterable columns" do
+    test "custom tabs render their label, icon, and body" do
       html =
         render_component(
           fn assigns ->
             ~H"""
-            <Slab.table id="test-table" data={@data}>
-              <:col field={:name} />
+            <Slab.table id="test-table" data={@data} uri={@uri}>
+              <:tab name="help" label="Help" icon="bookmark-outline" count={3}>
+                <p>Contact #data-team for access questions.</p>
+              </:tab>
+              <:column field={:name} />
             </Slab.table>
             """
           end,
-          data: [%{id: 1, name: "Ada"}]
+          data: [%{id: 1, name: "Ada"}],
+          uri: "https://example.com/users"
         )
 
-      refute html =~ "test-table-tabs"
+      assert html =~ "Help"
+      assert html =~ "Contact #data-team for access questions."
+      assert html =~ ~r{rounded-full">\s*3\s*</div>}
+    end
+
+    test "a body on a built-in tab replaces its default content" do
+      html =
+        render_component(
+          fn assigns ->
+            ~H"""
+            <Slab.table
+              id="test-table"
+              schema={SlabTest.User}
+              repo={SlabTest.FakeRepo}
+              uri={@uri}
+              params={@params}
+            >
+              <:tab name="filters">
+                <p>Custom filter UI</p>
+              </:tab>
+              <:filter field={:name} />
+              <:column field={:name} />
+            </Slab.table>
+            """
+          end,
+          uri: "https://example.com/users",
+          params: %{"filter" => %{"name" => "ada"}}
+        )
+
+      assert html =~ "Custom filter UI"
+      refute html =~ ~s(id="test-table-filter-name-form")
+
+      # The badge still derives from params
+      assert html =~ ~r{rounded-full">\s*1\s*</div>}
+
+      # And the filter still applies to the query
+      assert_received {:repo_all, %Ecto.Query{wheres: [_where]}}
+    end
+
+    test "raises on a custom tab without a label" do
+      assert_raise ArgumentError, ~r/requires a label and a body/, fn ->
+        render_component(
+          fn assigns ->
+            ~H"""
+            <Slab.table id="test-table" data={[]} uri="https://example.com/users">
+              <:tab name="help">body</:tab>
+              <:column field={:name} />
+            </Slab.table>
+            """
+          end,
+          %{}
+        )
+      end
+    end
+
+    test "raises on limit outside the export tab" do
+      assert_raise ArgumentError, ~r/limit is only supported on the export tab/, fn ->
+        render_component(
+          fn assigns ->
+            ~H"""
+            <Slab.table id="test-table" data={[]} uri="https://example.com/users">
+              <:tab name="share" limit={5} />
+              <:column field={:name} />
+            </Slab.table>
+            """
+          end,
+          %{}
+        )
+      end
+    end
+
+    test "raises on duplicate tab names" do
+      assert_raise ArgumentError, ~r/duplicate <:tab> names/, fn ->
+        render_component(
+          fn assigns ->
+            ~H"""
+            <Slab.table id="test-table" data={[]} uri="https://example.com/users">
+              <:tab name="share" />
+              <:tab name="share" />
+              <:column field={:name} />
+            </Slab.table>
+            """
+          end,
+          %{}
+        )
+      end
+    end
+
+    test "raises on url-driven tabs without a uri" do
+      assert_raise ArgumentError, ~r/tab name="share"> requires uri/, fn ->
+        render_component(
+          fn assigns ->
+            ~H"""
+            <Slab.table id="test-table" data={[]}>
+              <:tab name="share" />
+              <:column field={:name} />
+            </Slab.table>
+            """
+          end,
+          %{}
+        )
+      end
     end
   end
 
@@ -1049,16 +1275,11 @@ defmodule SlabTest do
       render_component(
         fn assigns ->
           ~H"""
-          <Slab.table
-            id="test-table"
-            data={@data}
-            uri={@uri}
-            params={@params}
-            columns_tab?={@columns_tab?}
-          >
-            <:col field={:name} />
-            <:col field={:email} optional />
-            <:col :let={user} label="Actions">Edit {user.name}</:col>
+          <Slab.table id="test-table" data={@data} uri={@uri} params={@params}>
+            <:tab :if={@columns_tab?} name="columns" />
+            <:column field={:name} />
+            <:column field={:email} optional />
+            <:column :let={user} label="Actions">Edit {user.name}</:column>
           </Slab.table>
           """
         end,
@@ -1109,7 +1330,7 @@ defmodule SlabTest do
       refute html =~ "Email"
     end
 
-    test "columns_tab? renders a picker with every column, optional included" do
+    test "the columns tab renders a picker with every column, optional included" do
       html = render_columns_table(%{"columns" => ["name", "email"]}, columns_tab?: true)
 
       assert html =~ "Table columns"
@@ -1123,10 +1344,28 @@ defmodule SlabTest do
       assert html =~ ~r{rounded-full">\s*2\s*</div>}
     end
 
-    test "the Columns tab is absent by default" do
-      html = render_columns_table(%{})
+    test "the checkbox column is not addressable through the columns param" do
+      html =
+        render_component(
+          fn assigns ->
+            ~H"""
+            <Slab.table id="test-table" data={@data} uri={@uri} params={@params}>
+              <:tab name="columns" />
+              <:column_checkbox />
+              <:column field={:name} />
+            </Slab.table>
+            """
+          end,
+          data: [%{id: 1, name: "Ada"}],
+          uri: "https://example.com/users",
+          params: %{"columns" => ["name"]}
+        )
 
-      refute html =~ "Table columns"
+      # Always visible, even with a columns param that does not mention it
+      assert html =~ "toggle-checkbox-for-row"
+
+      # And absent from the picker options
+      refute html =~ ~s(data-ps-option="column_checkbox")
     end
   end
 
@@ -1139,13 +1378,12 @@ defmodule SlabTest do
             id="test-table"
             schema={SlabTest.User}
             repo={SlabTest.FakeRepo}
-            paginate={@paginate}
             uri={@uri}
             params={@params}
-            export_tab?={@export_tab?}
-            export_limit={@export_limit}
           >
-            <:col field={:name} />
+            <:tab name="export" limit={@limit} />
+            <:column field={:name} />
+            <:pagination :if={@paginate} mode={@paginate} />
           </Slab.table>
           """
         end,
@@ -1154,8 +1392,7 @@ defmodule SlabTest do
             paginate: :page,
             uri: "https://example.com/users",
             params: %{},
-            export_tab?: true,
-            export_limit: 1000
+            limit: 1000
           },
           attrs
         )
@@ -1187,7 +1424,7 @@ defmodule SlabTest do
     end
 
     test "labels the full export by row count when the total exceeds the limit" do
-      html = render_export_table(%{export_limit: 10})
+      html = render_export_table(%{limit: 10})
 
       assert html =~ "Download first 10 rows"
       refute html =~ "Download all data"
@@ -1207,8 +1444,19 @@ defmodule SlabTest do
       refute html =~ "export-limit"
     end
 
-    test "the Export tab is absent by default" do
-      html = render_export_table(%{export_tab?: false})
+    test "the Export tab is absent without the tab slot" do
+      html =
+        render_component(
+          fn assigns ->
+            ~H"""
+            <Slab.table id="test-table" data={@data} uri={@uri}>
+              <:column field={:name} />
+            </Slab.table>
+            """
+          end,
+          data: [%{id: 1, name: "Ada"}],
+          uri: "https://example.com/users"
+        )
 
       refute html =~ "Download current page"
     end
@@ -1223,10 +1471,9 @@ defmodule SlabTest do
         repo: nil,
         uri: "https://example.com/users?page=2",
         params: %{"page" => "2"},
-        paginate: :page,
-        per_page: 2,
-        export_tab?: true,
-        col: [%{field: :name}, %{label: "Actions"}]
+        pagination: [%{mode: :page, per_page: 2}],
+        tab: [%{name: "export"}],
+        column: [%{field: :name}, %{label: "Actions"}]
       }
 
       {:ok, socket} = Slab.Live.update(assigns, export_socket())
@@ -1240,7 +1487,7 @@ defmodule SlabTest do
       assert payload.content == "\uFEFFName\r\nUser 3\r\nUser 4\r\n"
     end
 
-    test "export-limit takes the first export_limit rows of list data" do
+    test "export-limit takes the first limit rows of list data" do
       data = for n <- 1..5, do: %{id: n, name: "User #{n}"}
 
       assigns = %{
@@ -1250,11 +1497,9 @@ defmodule SlabTest do
         repo: nil,
         uri: "https://example.com/users?page=2",
         params: %{"page" => "2"},
-        paginate: :page,
-        per_page: 2,
-        export_tab?: true,
-        export_limit: 3,
-        col: [%{field: :name}]
+        pagination: [%{mode: :page, per_page: 2}],
+        tab: [%{name: "export", limit: 3}],
+        column: [%{field: :name}]
       }
 
       {:ok, socket} = Slab.Live.update(assigns, export_socket())
@@ -1272,11 +1517,10 @@ defmodule SlabTest do
         repo: FakeRepo,
         uri: "https://example.com/users?page=3",
         params: %{"page" => "3", "filter" => %{"name" => "a"}},
-        paginate: :page,
-        per_page: 2,
-        export_tab?: true,
-        export_limit: 100,
-        col: [%{field: :name, filterable: true}]
+        pagination: [%{mode: :page, per_page: 2}],
+        tab: [%{name: "export", limit: 100}],
+        filter: [%{field: :name}],
+        column: [%{field: :name}]
       }
 
       {:ok, socket} = Slab.Live.update(assigns, export_socket())

@@ -2,38 +2,36 @@ defmodule Slab do
   @moduledoc """
   A data table component for Phoenix LiveView.
 
-  Renders a table from a list of records and `<:col>` slot definitions, with
-  support for:
+  A table is composed from slots — every optional region is declared by the
+  presence of a slot, and nothing renders that wasn't declared:
 
-    * **Automatic cell rendering** based on Ecto schema field types — booleans
-      render as check/x icons, datetimes render with absolute and relative
-      formats, UUIDs are truncated with a hover tooltip, maps render as
-      code blocks.
-    * **Custom cell rendering** via slot bodies.
-    * **Sortable column headers** rendered as patch links that set `sort` and
-      `sort_direction` query params on the URL.
-    * **Row selection** (checkboxes) stored in the URL query string, so
-      selections survive navigation and pagination.
+    * `<:column>` — one per column, with automatic cell rendering by Ecto
+      field type, custom bodies, and URL-driven sorting
+    * `<:column_checkbox>` — row-selection checkboxes stored in the URL
+    * `<:filter>` — whitelists a field for URL-driven filtering and defines
+      its input
+    * `<:tab>` — the tab bar above the table (Filters, Columns, Share,
+      Export, or fully custom tabs), in declaration order
+    * `<:pagination>` — offset or keyset pagination
 
-  Table state — sorting and row selection — lives in the URL. The component
-  patches query params; the parent LiveView reacts to `handle_params/3`.
-  Callers pass the current `uri` and `params` (both from `handle_params/3`)
-  to enable these features.
+  All table state — sorting, filters, pagination, column layout, row
+  selection — lives in the URL. The component patches query params; the
+  parent LiveView reacts to `handle_params/3`. Callers pass the current
+  `uri` and `params` (both from `handle_params/3`) to enable these features.
 
   ## Usage
 
-  Render a table with `Slab.table/1`, defining columns as `<:col>` slots.
-  Data comes from one of two modes:
+  Render a table with `Slab.table/1`. Data comes from one of two modes:
 
   **List mode** — pass pre-fetched records via `data`. An optional `schema`
   (an `Ecto.Schema` module) makes values render according to their field
   type; without one, values render as strings:
 
       <Slab.table id="users-table" data={@users} schema={MyApp.User}>
-        <:col field={:id} />
-        <:col field={:name} />
-        <:col field={:email} />
-        <:col field={:inserted_at} />
+        <:column field={:id} />
+        <:column field={:name} />
+        <:column field={:email} />
+        <:column field={:inserted_at} />
       </Slab.table>
 
   **Query mode** — omit `data` and Slab fetches for you. `schema` becomes
@@ -41,8 +39,8 @@ defmodule Slab do
   through `repo`:
 
       <Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo} uri={@uri} params={@params}>
-        <:col field={:name} sortable />
-        <:col field={:email} />
+        <:column field={:name} sortable />
+        <:column field={:email} />
       </Slab.table>
 
   The repo can also be configured once, globally:
@@ -50,23 +48,24 @@ defmodule Slab do
       config :slab, repo: MyApp.Repo
 
   Passing an `%Ecto.Query{}` lets the caller scope what the table can ever
-  see (authorization, multi-tenancy) while Slab layers sorting on top:
+  see (authorization, multi-tenancy) while Slab layers sorting and
+  filtering on top:
 
       <Slab.table id="users-table" schema={from u in MyApp.User, where: u.org_id == ^@org.id} ...>
 
-  A `<:col>` with no body renders the record's `field` automatically.
+  A `<:column>` with no body renders the record's `field` automatically.
 
   ### Custom cell rendering
 
-  Give a `<:col>` a body to take over rendering. The body receives the record
-  via `:let`. A `field` is optional — omit it for virtual columns like
-  actions, and give the column a `label` instead:
+  Give a `<:column>` a body to take over rendering. The body receives the
+  record via `:let`. A `field` is optional — omit it for virtual columns
+  like actions, and give the column a `label` instead:
 
       <Slab.table id="users-table" data={@users}>
-        <:col :let={user} field={:name}>{String.upcase(user.name)}</:col>
-        <:col :let={user} label="Actions">
+        <:column :let={user} field={:name}>{String.upcase(user.name)}</:column>
+        <:column :let={user} label="Actions">
           <.link navigate={~p"/users/\#{user}/edit"}>Edit</.link>
-        </:col>
+        </:column>
       </Slab.table>
 
   ### Sorting
@@ -89,22 +88,25 @@ defmodule Slab do
       end
 
       <Slab.table id="users-table" data={@users} uri={@uri} params={@params}>
-        <:col field={:name} sortable />
-        <:col field={:email} sortable />
+        <:column field={:name} sortable />
+        <:column field={:email} sortable />
       </Slab.table>
 
   ### Filtering
 
-  Mark columns as `filterable` and Slab translates `filter` URL params into
-  WHERE conditions in query mode. Values are cast with `Ecto.Type.cast/2`
-  against the schema's field types — strings match with a case-insensitive
-  contains, other types by equality, and an operator form enables
-  comparisons. Only declared columns are ever filtered; invalid values and
-  unknown operators are ignored:
+  Declare a `<:filter>` per filterable field and Slab translates `filter`
+  URL params into WHERE conditions in query mode. Values are cast with
+  `Ecto.Type.cast/2` against the schema's field types — strings match with
+  a case-insensitive contains, other types by equality, and an operator
+  form enables comparisons. Only declared fields are ever filtered; invalid
+  values and unknown operators are ignored:
 
       <Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo} uri={@uri} params={@params}>
-        <:col field={:name} filterable />
-        <:col field={:inserted_at} filterable />
+        <:tab name="filters" />
+        <:filter field={:name} />
+        <:filter field={:inserted_at} />
+        <:column field={:name} />
+        <:column field={:inserted_at} />
       </Slab.table>
 
       ?filter[name]=ada                          # WHERE name ILIKE %ada%
@@ -113,36 +115,57 @@ defmodule Slab do
 
   Operators: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `contains`.
 
-  For custom logic — full-text search, filtering through associations — pass
-  a 2-arity `filter_query` function instead. It receives the queryable and the raw
-  param value, and can add joins or any Ecto condition (a `filter_query` function
-  implies `filterable`):
+  Filters are field-level, not column-level — a `<:filter>` needs no
+  matching `<:column>`, so you can filter on fields the table never shows.
 
-      <:col field={:organization} filter_query={fn query, value ->
+  For custom logic — full-text search, filtering through associations —
+  pass a 2-arity `query` function. It receives the queryable and the raw
+  param value, and can add joins or any Ecto condition:
+
+      <:filter field={:organization} query={fn query, value ->
         from u in query,
           join: o in assoc(u, :organization),
           where: ilike(o.name, ^"%\#{value}%")
       end} />
 
-  Render filter inputs with `filter/1`, which patches the `filter[field]`
-  param as the user types or selects:
+  Each `<:filter>` also defines its input in the Filters tab (see
+  [Tabs](#module-tabs)). The input type derives from the schema — booleans
+  and `Ecto.Enum` fields get a select with derived options, everything else
+  a text input — and the `type`, `label`, `options`, `placeholder`,
+  `min_chars`, and `debounce` attrs override the defaults. `type="hidden"`
+  whitelists the field without rendering an input — for filters driven from
+  elsewhere on the page.
 
-      <Slab.filter id="filter-name" field={:name} uri={@uri} params={@params}
-        label="Name" placeholder="Search names..." />
+  ### External filter UI
 
-  Or build custom filter UIs in the parent with `filter_path/3`, which sets
-  the param and resets pagination. For anything beyond per-field filters,
-  scope the `schema` query itself — the escape hatch always works.
+  The contract between filter UI and the table is the URL, so any component
+  that patches `filter[field]` params drives the table — the table only
+  requires the field to be whitelisted by a `<:filter>`. `Slab.filter/1`
+  works standalone anywhere on the page:
+
+      <Slab.filter id="filter-name" schema={MyApp.User} field={:name}
+        uri={@uri} params={@params} label="Name" placeholder="Search names..." />
+
+      <Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo} uri={@uri} params={@params}>
+        <:filter field={:name} type="hidden" />
+        <:column field={:name} sortable />
+      </Slab.table>
+
+  Components not owned by Slab integrate the same way: patch the URL with
+  `filter[field]=value` (or `filter[field][]=value` for multi-selects, and
+  `filter[field][op]=value` for operators) — `filter_path/3` builds those
+  paths. State stays in the URL, so sharing, back-button, and exports keep
+  working with any filter UI.
 
   ### Pagination
 
-  Pass `paginate` with one of two modes. `:page` is classic offset
-  pagination driven by `page` and `per_page` URL params — it works in both
-  data modes (in list mode the list is sliced in memory):
+  Declare a `<:pagination>` slot with one of two modes. `:page` is classic
+  offset pagination driven by `page` and `per_page` URL params — it works
+  in both data modes (in list mode the list is sliced in memory):
 
-      <Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo}
-        paginate={:page} per_page={25} uri={@uri} params={@params}>
-        <:col field={:name} />
+      <Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo} uri={@uri} params={@params}>
+        <:column field={:name} />
+        <:pagination mode={:page} per_page={25} />
       </Slab.table>
 
   `:cursor` is keyset pagination driven by an `after` URL param — built for
@@ -151,9 +174,9 @@ defmodule Slab do
   stay correct as records land, avoid deep-offset scans, and need no count
   query. Query mode only; navigation is First/Next (no random page access):
 
-      <Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo}
-        paginate={:cursor} per_page={25} uri={@uri} params={@params}>
-        <:col field={:inserted_at} sortable />
+      <Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo} uri={@uri} params={@params}>
+        <:column field={:inserted_at} sortable />
+        <:pagination mode={:cursor} per_page={25} />
       </Slab.table>
 
   Cursors are readable, not opaque: `?after[id]=...&after[value]=...` holds
@@ -164,33 +187,37 @@ defmodule Slab do
   in either mode.
 
   Page mode renders a full footer: a "Showing X to Y of Z entries" summary,
-  numbered page links with ellipses, and a page-size dropdown (see
-  `per_page_options`). The total comes from a count query cached on the
-  current filters — page and sort changes never re-count. Cursor mode never
-  runs a count query at all; it detects a next page by fetching one extra
-  record.
+  numbered page links with ellipses, and a page-size dropdown (see the
+  `options` attr). The total comes from a count query cached on the current
+  filters — page and sort changes never re-count. Cursor mode never runs a
+  count query at all; it detects a next page by fetching one extra record.
 
-  ### Tabs and sharing
+  ### Tabs
 
-  A tab bar above the table is derived automatically from the table
-  definition — no separate declaration:
+  Declare `<:tab>` slots to render a tab bar above the table. Tabs render
+  in declaration order. Four names have built-in content:
 
-    * a **Filters** tab appears when any `<:col>` is `filterable`, with one
-      input per filterable column and a badge showing the active filter
-      count. Input types derive from the schema — booleans and `Ecto.Enum`
-      fields get a select with derived options, everything else a text
-      input — and the col's `filter_type`, `filter_options`,
-      `filter_placeholder`, and `filter_min_chars` attrs override the
-      defaults
-    * a **Columns** tab appears when `columns_tab?` is set and `uri` is
-      given — see the next section
-    * a **Share** tab appears when `share_tab?` is set and `uri` is given,
-      holding a copyable link to the exact current view
-    * an **Export** tab appears when `export_tab?` is set — see
-      [Exporting](#module-exporting)
+    * `<:tab name="filters" />` — one input per non-hidden `<:filter>`, with
+      a badge showing the active filter count; requires `uri`
+    * `<:tab name="columns" />` — a picker driving the `columns[]` URL param
+      (see [Column visibility and order](#module-column-visibility-and-order));
+      requires `uri`
+    * `<:tab name="share" />` — a copyable link to the exact current view;
+      requires `uri`
+    * `<:tab name="export" />` — CSV downloads (see
+      [Exporting](#module-exporting)); takes a `limit` attr
 
-  No qualifying tabs, no tab bar. `tabs/1`, `share/1`, and `filter/1`
-  remain public for composing custom layouts outside the table.
+  A body on a built-in tab replaces its default content (the badge count
+  stays params-derived), and any other `name` defines a custom tab — give
+  it a `label`, an optional `icon` and `count`, and a body:
+
+      <:tab name="filters" />
+      <:tab name="help" label="Help" icon="bookmark-outline">
+        <p>Contact #data-team for access questions.</p>
+      </:tab>
+
+  No `<:tab>` slots, no tab bar. `tabs/1`, `share/1`, and `filter/1` remain
+  public for composing custom layouts outside the table.
 
   ### Exporting
 
@@ -198,19 +225,20 @@ defmodule Slab do
   delivered through the browser — no extra routes or setup. Two buttons:
 
     * **Download current page** — the rows exactly as displayed
-    * **Download all data** — the first `export_limit` rows (default 1000)
-      of the current filtered, sorted result; when the total exceeds the
-      limit the button reads "Download first N rows" instead
+    * **Download all data** — the first `limit` rows (default 1000) of the
+      current filtered, sorted result; when the total exceeds the limit the
+      button reads "Download first N rows" instead
 
   Exports honor the current filters, sort, and column selection. Columns
   render their raw field values (see `Slab.Export.csv/2` for the value
   formats); virtual columns without a `field` — like action links — are
-  skipped. The file travels over the LiveView socket, so keep
-  `export_limit` in the thousands, not the millions:
+  skipped. The file travels over the LiveView socket, so keep `limit` in
+  the thousands, not the millions:
 
-      <Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo}
-        paginate={:page} export_tab? export_limit={5000} uri={@uri} params={@params}>
-        <:col field={:name} />
+      <Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo} uri={@uri} params={@params}>
+        <:tab name="export" limit={5000} />
+        <:column field={:name} />
+        <:pagination mode={:page} />
       </Slab.table>
 
   The download button uses a colocated hook — register Slab's hooks once in
@@ -229,9 +257,10 @@ defmodule Slab do
   default view. With no param, columns render in declaration order minus
   those marked `optional`:
 
-      <Slab.table id="users-table" ... columns_tab?>
-        <:col field={:name} />
-        <:col field={:email} optional />
+      <Slab.table id="users-table" ...>
+        <:tab name="columns" />
+        <:column field={:name} />
+        <:column field={:email} optional />
       </Slab.table>
 
   The Columns tab renders a multi-select picker driving the param; its
@@ -241,11 +270,14 @@ defmodule Slab do
 
   ### Row selection
 
-  Pass `checkable?` and the current `uri`. Checked row IDs are stored in the
+  Declare `<:column_checkbox />` and pass the current `uri`. It renders as
+  the first column, always visible (it is not addressable through the
+  Columns tab or the `columns[]` param), with checked row IDs stored in the
   `checked` query param via `push_patch`:
 
-      <Slab.table id="users-table" data={@users} checkable? uri={@uri}>
-        <:col field={:name} />
+      <Slab.table id="users-table" data={@users} uri={@uri}>
+        <:column_checkbox />
+        <:column field={:name} />
       </Slab.table>
 
   Read selections back with `get_checked_ids/1`, `get_checked_values/3`, and
@@ -266,12 +298,13 @@ defmodule Slab do
   alias Phoenix.LiveView.JS
 
   @doc """
-  Renders a data table.
+  Renders a data table composed from slots.
 
-  Columns are defined with `<:col>` slots — see the module docs for full
-  usage. Interactive features (row selection) are handled internally by a
-  live component; sorting is handled with patch links. Both require the
-  current `uri`, and sorting additionally reads the current `params`.
+  Every optional region is declared by the presence of a slot — columns,
+  row-selection checkboxes, filters, tabs, pagination. See the module docs
+  for full usage of each. Interactive features are handled internally by a
+  live component; sorting is handled with patch links. URL-driven features
+  require the current `uri` and `params`.
 
   Data comes from one of two modes:
 
@@ -279,20 +312,25 @@ defmodule Slab do
       optional rendering hint.
     * **Query mode** — omit `data` and pass `schema` (an `Ecto.Schema` module
       or an `%Ecto.Query{}`) plus a `repo`; Slab runs the query itself,
-      applying sorting from `params`. The repo may also be set globally with
-      `config :slab, repo: MyApp.Repo`.
+      applying sorting, filtering, and pagination from `params`. The repo
+      may also be set globally with `config :slab, repo: MyApp.Repo`.
 
   ## Examples
 
       <Slab.table id="users-table" data={@users} uri={@uri} params={@params}>
-        <:col field={:name} sortable />
-        <:col :let={user} label="Actions">
+        <:column field={:name} sortable />
+        <:column :let={user} label="Actions">
           <.link navigate={"/users/\#{user.id}/edit"}>Edit</.link>
-        </:col>
+        </:column>
       </Slab.table>
 
       <Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo} uri={@uri} params={@params}>
-        <:col field={:name} sortable />
+        <:tab name="filters" />
+        <:tab name="share" />
+        <:filter field={:name} placeholder="Search names..." />
+        <:column_checkbox />
+        <:column field={:name} sortable />
+        <:pagination mode={:page} per_page={25} />
       </Slab.table>
   """
   attr(:id, :string, required: true)
@@ -318,72 +356,83 @@ defmodule Slab do
 
   attr(:uri, :string,
     default: nil,
-    doc: "the current request URI, from handle_params/3; enables sorting and row selection"
+    doc: "the current request URI, from handle_params/3; required by URL-driven slots"
   )
 
   attr(:params, :map,
     default: %{},
-    doc: "the current request params, from handle_params/3; carries sort state"
-  )
-
-  attr(:checkable?, :boolean,
-    default: false,
-    doc: "renders row-selection checkboxes; requires uri"
-  )
-
-  attr(:paginate, :atom,
-    default: nil,
-    values: [nil, :page, :cursor],
     doc:
-      "pagination mode; `:page` uses page/per_page params (works in both data modes), " <>
-        "`:cursor` uses keyset cursors for constantly-updated data (query mode only); " <>
-        "requires uri"
+      "the current request params, from handle_params/3; carries sort, filter, " <>
+        "pagination, column, and selection state"
   )
 
-  attr(:per_page, :integer,
-    default: 25,
-    doc: "default page size; the URL per_page param overrides it up to max_per_page"
-  )
-
-  attr(:max_per_page, :integer,
-    default: 100,
-    doc: "upper clamp for the URL per_page param"
-  )
-
-  attr(:per_page_options, :list,
-    default: [10, 25, 50, 100],
+  slot :tab,
     doc:
-      "page sizes offered in the footer dropdown (page mode); values above " <>
-        "max_per_page are dropped, and the current size is always included"
-  )
+      "tabs rendered above the table, in declaration order; the names filters, " <>
+        "columns, share, and export have built-in content (a body replaces it), " <>
+        "any other name is a custom tab requiring a label and a body" do
+    attr(:name, :string, required: true, doc: "the tab type, or a custom tab's identity")
 
-  attr(:share_tab?, :boolean,
-    default: false,
-    doc: "shows the Share tab above the table when uri is present"
-  )
+    attr(:label, :string,
+      doc: "the tab label; derived for built-in names, required for custom tabs"
+    )
 
-  attr(:columns_tab?, :boolean,
-    default: false,
+    attr(:icon, :string,
+      doc:
+        "icon rendered before the label; derived for built-in names — see " <>
+          "`Slab.Components.icon/1` for the available names"
+    )
+
+    attr(:count, :integer, doc: "badge count for custom tabs; built-in tabs compute their own")
+
+    attr(:limit, :integer,
+      doc:
+        "export only: maximum rows in a full-data export (default 1000); the " <>
+          "download travels over the LiveView socket, so keep it modest"
+    )
+  end
+
+  slot :filter,
     doc:
-      "shows the Columns tab above the table when uri is present, letting users " <>
-        "toggle and reorder columns via the columns[] URL param"
-  )
+      "one slot per filterable field; whitelists the field for filter URL params " <>
+        "in query mode and defines its input in the Filters tab" do
+    attr(:field, :atom, required: true, doc: "the field to filter on")
 
-  attr(:export_tab?, :boolean,
-    default: false,
-    doc:
-      "shows the Export tab above the table, offering CSV downloads of the " <>
-        "current page or the first export_limit rows of the filtered result"
-  )
+    attr(:label, :string,
+      doc: "label for the Filters tab input; defaults to the humanized field name"
+    )
 
-  attr(:export_limit, :integer,
-    default: 1000,
-    doc:
-      "maximum rows in a full-data export; the download travels over the " <>
-        "LiveView socket, so keep it modest"
-  )
+    attr(:type, :string,
+      values: ["text", "select", "multiselect", "hidden"],
+      doc:
+        "the Filters tab input type; defaults by schema type — booleans and " <>
+          "Ecto.Enum fields get a select, everything else text. \"hidden\" " <>
+          "whitelists the field without rendering an input, for filters driven " <>
+          "from elsewhere on the page"
+    )
 
-  slot :col, required: true, doc: "one slot per column" do
+    attr(:options, :list,
+      doc:
+        "options for select/multiselect inputs, as `[{label, value}]` tuples or " <>
+          "plain values; derived automatically for booleans and Ecto.Enum fields"
+    )
+
+    attr(:placeholder, :string, doc: "placeholder for the Filters tab input")
+
+    attr(:min_chars, :integer,
+      doc: "minimum characters before a text filter change applies (default 0)"
+    )
+
+    attr(:debounce, :integer, doc: "milliseconds to debounce text input changes (default 300)")
+
+    attr(:query, :any,
+      doc:
+        "custom 2-arity filter function (queryable, value) -> queryable; skips " <>
+          "type casting and may join associations"
+    )
+  end
+
+  slot :column, required: true, doc: "one slot per column" do
     attr(:field, :any,
       doc: "the record field to render; optional for virtual columns with a body"
     )
@@ -396,40 +445,6 @@ defmodule Slab do
           "also whitelists the field for ORDER BY"
     )
 
-    attr(:filterable, :boolean,
-      doc:
-        "whitelists the field for filter URL params in query mode and adds an " <>
-          "input to the Filters tab; strings match with case-insensitive contains, " <>
-          "other types by equality, and filter[field][op]= enables " <>
-          "eq/neq/gt/gte/lt/lte/contains"
-    )
-
-    attr(:filter_query, :any,
-      doc:
-        "custom 2-arity filter function (queryable, value) -> queryable; implies " <>
-          "filterable, skips type casting, and may join associations"
-    )
-
-    attr(:filter_type, :string,
-      values: ["text", "select", "multiselect"],
-      doc:
-        "overrides the Filters tab input type; defaults by schema type — " <>
-          "booleans and Ecto.Enum fields get a select, everything else text"
-    )
-
-    attr(:filter_options, :list,
-      doc:
-        "options for select/multiselect filter inputs, as `[{label, value}]` " <>
-          "tuples or plain values; derived automatically for booleans and " <>
-          "Ecto.Enum fields"
-    )
-
-    attr(:filter_placeholder, :string, doc: "placeholder for the Filters tab input")
-
-    attr(:filter_min_chars, :integer,
-      doc: "minimum characters before a text filter change applies (default 0)"
-    )
-
     attr(:optional, :boolean,
       doc:
         "starts the column hidden until enabled through the Columns tab or the " <>
@@ -437,8 +452,40 @@ defmodule Slab do
     )
   end
 
+  slot(:column_checkbox,
+    doc:
+      "renders row-selection checkboxes as the first column, always visible; " <>
+        "checked row IDs live in the checked URL param; requires uri"
+  )
+
+  slot :pagination, doc: "paginates the table; at most one" do
+    attr(:mode, :atom,
+      values: [:page, :cursor],
+      doc:
+        "`:page` uses page/per_page params (works in both data modes), `:cursor` " <>
+          "uses keyset cursors for constantly-updated data (query mode only); " <>
+          "requires uri"
+    )
+
+    attr(:per_page, :integer,
+      doc: "default page size (25); the URL per_page param overrides it up to max_per_page"
+    )
+
+    attr(:max_per_page, :integer, doc: "upper clamp for the URL per_page param (100)")
+
+    attr(:options, :list,
+      doc:
+        "page sizes offered in the footer dropdown (page mode, default " <>
+          "[10, 25, 50, 100]); values above max_per_page are dropped, and the " <>
+          "current size is always included"
+    )
+  end
+
   def table(assigns) do
     validate_pagination!(assigns)
+    validate_column_checkbox!(assigns)
+    validate_tabs!(assigns)
+    validate_filters!(assigns)
     assigns = assign(assigns, :repo, resolve_repo!(assigns))
 
     ~H"""
@@ -450,37 +497,108 @@ defmodule Slab do
       repo={@repo}
       uri={@uri}
       params={@params}
-      checkable?={@checkable?}
-      paginate={@paginate}
-      per_page={@per_page}
-      max_per_page={@max_per_page}
-      per_page_options={@per_page_options}
-      share_tab?={@share_tab?}
-      columns_tab?={@columns_tab?}
-      export_tab?={@export_tab?}
-      export_limit={@export_limit}
-      col={@col}
+      tab={@tab}
+      filter={@filter}
+      column={@column}
+      column_checkbox={@column_checkbox}
+      pagination={@pagination}
     />
     """
   end
 
-  defp validate_pagination!(%{paginate: nil}), do: :ok
+  defp validate_pagination!(%{pagination: []}), do: :ok
 
-  defp validate_pagination!(%{paginate: paginate, data: data, uri: uri}) do
+  defp validate_pagination!(%{pagination: [entry], data: data, uri: uri}) do
     cond do
+      entry[:mode] == nil ->
+        raise ArgumentError,
+              "Slab.table <:pagination> requires a mode — :page for offset pagination " <>
+                "or :cursor for keyset pagination."
+
       is_nil(uri) ->
         raise ArgumentError,
-              "Slab.table pagination requires uri — without it the table would be " <>
+              "Slab.table <:pagination> requires uri — without it the table would be " <>
                 "truncated with no way to navigate. Pass uri={@uri} from handle_params/3."
 
-      paginate == :cursor && is_list(data) ->
+      entry.mode == :cursor && is_list(data) ->
         raise ArgumentError,
               "Slab.table cursor pagination requires query mode — pass schema and repo " <>
-                "instead of data, or use paginate={:page} to paginate a list in memory."
+                "instead of data, or use mode={:page} to paginate a list in memory."
 
       true ->
         :ok
     end
+  end
+
+  defp validate_pagination!(_assigns) do
+    raise ArgumentError, "Slab.table accepts at most one <:pagination> slot."
+  end
+
+  defp validate_column_checkbox!(%{column_checkbox: []}), do: :ok
+
+  defp validate_column_checkbox!(%{column_checkbox: [_entry], uri: uri}) do
+    if is_nil(uri) do
+      raise ArgumentError,
+            "Slab.table <:column_checkbox> requires uri — selections are stored in " <>
+              "the URL. Pass uri={@uri} from handle_params/3."
+    end
+
+    :ok
+  end
+
+  defp validate_column_checkbox!(_assigns) do
+    raise ArgumentError, "Slab.table accepts at most one <:column_checkbox> slot."
+  end
+
+  @built_in_tabs ~w(filters columns share export)
+  @uri_tabs ~w(filters columns share)
+
+  defp validate_tabs!(%{tab: tabs, uri: uri}) do
+    names = Enum.map(tabs, & &1.name)
+
+    if names != Enum.uniq(names) do
+      raise ArgumentError, "Slab.table received duplicate <:tab> names."
+    end
+
+    Enum.each(tabs, fn tab -> validate_tab!(tab, uri) end)
+  end
+
+  defp validate_tab!(%{name: name}, nil) when name in @uri_tabs do
+    raise ArgumentError,
+          "Slab.table <:tab name=\"#{name}\"> requires uri — its content is " <>
+            "driven by the URL. Pass uri={@uri} from handle_params/3."
+  end
+
+  defp validate_tab!(%{name: name} = tab, _uri) do
+    cond do
+      tab[:limit] && name != "export" ->
+        raise ArgumentError,
+              "Slab.table <:tab> limit is only supported on the export tab."
+
+      name not in @built_in_tabs && (tab[:label] in [nil, ""] || tab[:inner_block] == nil) ->
+        raise ArgumentError,
+              "Slab.table <:tab name=\"#{name}\"> is a custom tab and requires " <>
+                "a label and a body."
+
+      true ->
+        :ok
+    end
+  end
+
+  defp validate_filters!(%{filter: filters}) do
+    fields = Enum.map(filters, & &1.field)
+
+    if fields != Enum.uniq(fields) do
+      raise ArgumentError, "Slab.table received duplicate <:filter> fields."
+    end
+
+    Enum.each(filters, fn filter ->
+      if filter[:query] && !is_function(filter[:query], 2) do
+        raise ArgumentError,
+              "Slab.table <:filter query> must be a 2-arity function " <>
+                "(queryable, value) -> queryable."
+      end
+    end)
   end
 
   @doc """
@@ -493,12 +611,15 @@ defmodule Slab do
 
   Three input types:
 
-    * `"text"` (default) — debounced text input; with a string-typed column
-      this becomes a case-insensitive contains match
+    * `"text"` — debounced text input; with a string-typed field this
+      becomes a case-insensitive contains match
     * `"select"` — a searchable single select ([PhoenixSelect](https://github.com/chrislaskey/phoenix_select));
       clearing the selection clears the filter
     * `"multiselect"` — a searchable multi select; the selected values filter
       with `field IN (...)`
+
+  When `type` is omitted it derives from `schema` — booleans and `Ecto.Enum`
+  fields get a select with derived options, everything else a text input.
 
   The select types render via PhoenixSelect's colocated hook — register it
   once in `assets/js/app.js` (see the README's installation section).
@@ -507,6 +628,9 @@ defmodule Slab do
 
       <Slab.filter id="filter-name" field={:name} uri={@uri} params={@params}
         label="Name" placeholder="Search names..." />
+
+      <Slab.filter id="filter-role" schema={MyApp.User} field={:role}
+        uri={@uri} params={@params} label="Role" />
 
       <Slab.filter id="filter-active" field={:active} uri={@uri} params={@params}
         type="select" label="Status"
@@ -520,7 +644,7 @@ defmodule Slab do
 
   attr(:field, :any,
     required: true,
-    doc: "the filter key — matches a `<:col filterable>` field on the table"
+    doc: "the filter key — matches a `<:filter>` field on the table"
   )
 
   attr(:uri, :string,
@@ -533,19 +657,29 @@ defmodule Slab do
     doc: "the current request params, from handle_params/3; carries the current value"
   )
 
-  attr(:type, :string,
-    default: "text",
-    values: ["text", "select", "multiselect"],
-    doc: "the input type"
+  attr(:schema, :atom,
+    default: nil,
+    doc:
+      "optional Ecto.Schema module used to derive the input type and options " <>
+        "when they are not given"
   )
 
-  attr(:label, :string, default: nil, doc: "optional label rendered above the input")
+  attr(:type, :string,
+    default: nil,
+    doc:
+      ~s(the input type: "text", "select", or "multiselect"; derived from schema ) <>
+        "when omitted, defaulting to text"
+  )
+
+  attr(:label, :string, default: nil, doc: "optional label rendered beside the input")
 
   attr(:placeholder, :string, default: nil, doc: "placeholder for the input")
 
   attr(:options, :list,
     default: [],
-    doc: "select options, as `[{label, value}]` tuples or plain values"
+    doc:
+      "select options, as `[{label, value}]` tuples or plain values; derived " <>
+        "from schema for booleans and Ecto.Enum fields when not given"
   )
 
   attr(:debounce, :integer,
@@ -560,7 +694,19 @@ defmodule Slab do
         "clearing the filter); submitting the form applies regardless"
   )
 
-  def filter(%{type: "text"} = assigns) do
+  def filter(assigns) do
+    {derived_type, derived_options} =
+      Slab.Query.filter_input_defaults(assigns.schema, assigns.field)
+
+    assigns =
+      assigns
+      |> assign(:type, assigns.type || derived_type)
+      |> assign(:options, if(assigns.options == [], do: derived_options, else: assigns.options))
+
+    render_filter(assigns)
+  end
+
+  defp render_filter(%{type: "text"} = assigns) do
     ~H"""
     <div class="flex-1 min-w-0 flex items-center gap-x-3">
       <label :if={@label} for={"#{@id}-input"} class="whitespace-nowrap text-sm text-zinc-700">
@@ -582,7 +728,7 @@ defmodule Slab do
     """
   end
 
-  def filter(assigns) do
+  defp render_filter(assigns) do
     ~H"""
     <div class="flex-1 min-w-0 flex items-center gap-x-3">
       <label :if={@label} for={"#{@id}-input"} class="whitespace-nowrap text-sm text-zinc-700">

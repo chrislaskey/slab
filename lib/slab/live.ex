@@ -17,13 +17,14 @@ defmodule Slab.Live do
 
   @impl true
   def update(assigns, socket) do
+    assigns = normalize_assigns(assigns)
     uri = Map.get(assigns, :uri)
     params = Map.get(assigns, :params, %{})
 
     {data, has_next?, query_inputs} = resolve_data(assigns, params, socket)
     {total, count_inputs} = resolve_total(assigns, params, socket)
 
-    checkable? = Map.get(assigns, :checkable?, false) && uri != nil
+    checkable? = assigns.checkable?
     checked_ids_lookup = get_checked_ids_lookup(checkable?, uri)
 
     checked_all? =
@@ -44,12 +45,10 @@ defmodule Slab.Live do
     socket =
       socket
       |> assign(assigns)
-      |> assign(:checkable?, checkable?)
       |> assign(:checked_all?, checked_all?)
       |> assign(:checked_ids_lookup, checked_ids_lookup)
       |> assign(:count_inputs, count_inputs)
       |> assign(:data, data)
-      |> assign(:export_limit, Map.get(assigns, :export_limit, 1000))
       |> assign(:field_types, field_types)
       |> assign(:list_data, if(is_list(Map.get(assigns, :data)), do: Map.get(assigns, :data)))
       |> assign(:params, params)
@@ -58,12 +57,34 @@ defmodule Slab.Live do
       |> assign(:sort_direction, Map.get(params, "sort_direction"))
       |> assign(:total, total)
       |> assign(:uri, uri)
-      |> assign(:visible_cols, visible_cols(Map.get(assigns, :col, []), params))
+      |> assign(:visible_cols, visible_cols(Map.get(assigns, :column, []), params))
       |> assign_pagination(assigns, params, data, has_next?, total)
-      |> assign_tabs(assigns, params, uri, field_types)
+      |> assign_tabs(assigns, params, uri)
 
     {:ok, socket}
   end
+
+  # Slots arrive as lists of maps. Flatten the singleton slots and the
+  # config they carry into the assigns the rest of the component reads.
+  defp normalize_assigns(assigns) do
+    pagination = assigns |> Map.get(:pagination, []) |> List.first()
+    export = assigns |> Map.get(:tab, []) |> Enum.find(&(&1.name == "export"))
+    checkbox? = Map.get(assigns, :column_checkbox, []) != []
+
+    assigns
+    |> Map.put_new(:tab, [])
+    |> Map.put_new(:filter, [])
+    |> Map.put_new(:column, [])
+    |> Map.put(:checkable?, checkbox? && Map.get(assigns, :uri) != nil)
+    |> Map.put(:paginate, pagination && pagination[:mode])
+    |> Map.put(:per_page, slot_config(pagination, :per_page, 25))
+    |> Map.put(:max_per_page, slot_config(pagination, :max_per_page, 100))
+    |> Map.put(:per_page_options, slot_config(pagination, :options, [10, 25, 50, 100]))
+    |> Map.put(:export_limit, slot_config(export, :limit, 1000))
+  end
+
+  defp slot_config(nil, _key, default), do: default
+  defp slot_config(entry, key, default), do: Map.get(entry, key) || default
 
   # Helpers - Column visibility
 
@@ -115,30 +136,48 @@ defmodule Slab.Live do
     |> String.trim("-")
   end
 
-  # Tabs are derived from the table definition: a Filters tab appears when
-  # any column is filterable, Columns and Share tabs when their attrs are
-  # set and a uri is given. No qualifying tabs, no tab bar.
-  defp assign_tabs(socket, assigns, params, uri, field_types) do
+  # The tab bar renders <:tab> entries in declaration order. Built-in names
+  # get derived labels, icons, and badge counts; custom tabs bring their
+  # own. Badge counts derive from the URL params, so they stay correct even
+  # when a tab's content is replaced by a custom body.
+  defp assign_tabs(socket, assigns, params, uri) do
     schema = Slab.Query.schema_module(Map.get(assigns, :schema))
-    cols = Map.get(assigns, :col, [])
-    filter_inputs = filter_inputs(cols, field_types, schema)
-    filter_tab? = filter_inputs != [] && uri != nil
-    columns_tab? = Map.get(assigns, :columns_tab?, false) && uri != nil
-    share_tab? = Map.get(assigns, :share_tab?, false) && uri != nil
-
     columns_param = Map.get(params, "columns")
 
+    counts = %{
+      "filters" => Slab.get_filter_count(params),
+      "columns" => if(is_list(columns_param), do: length(columns_param), else: 0),
+      "share" => if(uri, do: Slab.Helpers.URI.get_query_param_count(uri), else: 0)
+    }
+
+    tab_entries =
+      for tab <- Map.get(assigns, :tab, []) do
+        %{
+          name: tab.name,
+          label: tab[:label] || tab_label(tab.name),
+          icon: tab[:icon] || tab_icon(tab.name),
+          count: tab[:count] || Map.get(counts, tab.name, 0),
+          slot: tab
+        }
+      end
+
     socket
-    |> assign(:filter_inputs, filter_inputs)
-    |> assign(:filter_tab?, filter_tab?)
-    |> assign(:columns_tab?, columns_tab?)
-    |> assign(:share_tab?, share_tab?)
-    |> assign(:export_tab?, Map.get(assigns, :export_tab?, false))
-    |> assign(:column_options, column_options(cols))
-    |> assign(:columns_count, if(is_list(columns_param), do: length(columns_param), else: 0))
-    |> assign(:filter_count, Slab.get_filter_count(params))
-    |> assign(:share_count, if(uri, do: Slab.Helpers.URI.get_query_param_count(uri), else: 0))
+    |> assign(:filter_inputs, filter_inputs(Map.get(assigns, :filter, []), schema))
+    |> assign(:tab_entries, tab_entries)
+    |> assign(:column_options, column_options(Map.get(assigns, :column, [])))
   end
+
+  defp tab_label("filters"), do: "Filters"
+  defp tab_label("columns"), do: "Columns"
+  defp tab_label("share"), do: "Share"
+  defp tab_label("export"), do: "Export"
+  defp tab_label(name), do: name
+
+  defp tab_icon("filters"), do: "funnel-outline"
+  defp tab_icon("columns"), do: "view-columns-outline"
+  defp tab_icon("share"), do: "bookmark-outline"
+  defp tab_icon("export"), do: "arrow-down-tray-outline"
+  defp tab_icon(_name), do: nil
 
   # Picker options for the Columns tab, in declaration order
   defp column_options(cols) do
@@ -150,38 +189,22 @@ defmodule Slab.Live do
     end
   end
 
-  # One input per filterable column. The col's filter_* attrs win; otherwise
-  # the type is derived from the schema — booleans and Ecto.Enum fields get
-  # a select with derived options, everything else a text input.
-  defp filter_inputs(cols, field_types, schema) do
-    for col <- cols,
-        Map.get(col, :filterable, false) || is_function(col[:filter_query], 2),
-        is_atom(col[:field]) && col[:field] do
-      {default_type, default_options} =
-        filter_input_defaults(Map.get(field_types, col.field), schema, col.field)
+  # One input per non-hidden <:filter>. Explicit attrs win; otherwise the
+  # type and options derive from the schema — booleans and Ecto.Enum fields
+  # get a select with derived options, everything else a text input.
+  defp filter_inputs(filters, schema) do
+    for filter <- filters, filter[:type] != "hidden" do
+      {default_type, default_options} = Slab.Query.filter_input_defaults(schema, filter.field)
 
       %{
-        field: col.field,
-        label: column_label(col),
-        type: col[:filter_type] || default_type,
-        options: col[:filter_options] || default_options,
-        placeholder: col[:filter_placeholder],
-        min_chars: col[:filter_min_chars] || 0
+        field: filter.field,
+        label: filter[:label] || humanize_field(filter.field),
+        type: filter[:type] || default_type,
+        options: filter[:options] || default_options,
+        placeholder: filter[:placeholder],
+        min_chars: filter[:min_chars] || 0,
+        debounce: filter[:debounce] || 300
       }
-    end
-  end
-
-  defp filter_input_defaults(:boolean, _schema, _field) do
-    {"select", [{"True", "true"}, {"False", "false"}]}
-  end
-
-  defp filter_input_defaults(_type, schema, field) do
-    case Slab.Query.enum_values(schema, field) do
-      nil ->
-        {"text", []}
-
-      values ->
-        {"select", Enum.map(values, fn value -> {humanize_field(value), to_string(value)} end)}
     end
   end
 
@@ -204,8 +227,8 @@ defmodule Slab.Live do
 
   defp resolve_data(assigns, params, socket) do
     opts = %{
-      sortable_fields: sortable_fields(Map.get(assigns, :col, [])),
-      filterable_cols: filterable_cols(Map.get(assigns, :col, [])),
+      sortable_fields: sortable_fields(Map.get(assigns, :column, [])),
+      filterable_cols: filterable_cols(Map.get(assigns, :filter, [])),
       paginate: Map.get(assigns, :paginate),
       per_page: Map.get(assigns, :per_page, 25),
       max_per_page: Map.get(assigns, :max_per_page, 100)
@@ -248,7 +271,7 @@ defmodule Slab.Live do
         {socket.assigns.total, count_inputs}
       else
         {schema, repo, _filter} = count_inputs
-        filterable = filterable_cols(Map.get(assigns, :col, []))
+        filterable = filterable_cols(Map.get(assigns, :filter, []))
 
         {Slab.Query.count(schema, repo, params, filterable), count_inputs}
       end
@@ -264,13 +287,11 @@ defmodule Slab.Live do
     end
   end
 
-  # Columns whitelisted for WHERE: declared filterable, or carrying a custom
-  # filter_query function (which implies filterable)
-  defp filterable_cols(cols) do
-    for col <- cols,
-        Map.get(col, :filterable, false) || is_function(col[:filter_query], 2),
-        is_atom(col[:field]) && col[:field] do
-      %{field: col.field, filter: col[:filter_query]}
+  # Fields whitelisted for WHERE, from <:filter> declarations — hidden
+  # filters whitelist like any other, only their input is absent
+  defp filterable_cols(filters) do
+    for filter <- filters, is_atom(filter[:field]) && filter[:field] do
+      %{field: filter.field, filter: filter[:query]}
     end
   end
 
@@ -404,7 +425,7 @@ defmodule Slab.Live do
 
     sort_field =
       assigns
-      |> Map.get(:col, [])
+      |> Map.get(:column, [])
       |> sortable_fields()
       |> Enum.find(fn field -> to_string(field) == sort end)
 
@@ -432,91 +453,21 @@ defmodule Slab.Live do
   def render(assigns) do
     ~H"""
     <div>
-      <div :if={@filter_tab? || @columns_tab? || @share_tab? || @export_tab?} class="-mb-4">
+      <div :if={@tab_entries != []} class="-mb-4">
         <Slab.tabs id={"#{@id}-tabs"} flush_bottom?>
-          <:tab :if={@filter_tab?} label="Filters" icon="funnel-outline" count={@filter_count}>
-            <div class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4">
-              <Slab.filter
-                :for={input <- @filter_inputs}
-                id={"#{@id}-filter-#{input.field}"}
-                field={input.field}
-                uri={@uri}
-                params={@params}
-                type={input.type}
-                label={input.label}
-                options={input.options}
-                placeholder={input.placeholder}
-                min_chars={input.min_chars}
-              />
-            </div>
-          </:tab>
-          <:tab :if={@columns_tab?} label="Columns" icon="view-columns-outline" count={@columns_count}>
-            <div class="flex items-center gap-x-3">
-              <div class="whitespace-nowrap text-sm text-zinc-700">Table columns</div>
-              <div class="w-full">
-                <PhoenixSelect.select
-                  id={"#{@id}-columns"}
-                  param="columns"
-                  uri={@uri}
-                  params={@params}
-                  options={@column_options}
-                  multiple
-                  placeholder="Default columns"
-                />
-              </div>
-            </div>
-          </:tab>
-          <:tab :if={@share_tab?} label="Share" icon="bookmark-outline" count={@share_count}>
-            <Slab.share id={"#{@id}-share"} uri={@uri} />
-          </:tab>
-          <:tab :if={@export_tab?} label="Export" icon="arrow-down-tray-outline">
-            <div
-              id={"#{@id}-export"}
-              phx-hook=".Download"
-              data-slab-id={@id}
-              class="flex items-center gap-x-3"
-            >
-              <div class="whitespace-nowrap text-sm text-zinc-700">Export CSV</div>
-              <div class="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  phx-target={@myself}
-                  phx-click="export-current"
-                  class={export_button_class()}
-                >
-                  <.icon type="arrow-down-tray-outline" class="h-4 w-4 text-cyan-600" />
-                  Download current page
-                </button>
-                <button
-                  :if={@paginate}
-                  type="button"
-                  phx-target={@myself}
-                  phx-click="export-limit"
-                  phx-disable-with="Preparing download..."
-                  class={export_button_class()}
-                >
-                  <.icon type="arrow-down-tray-outline" class="h-4 w-4 text-cyan-600" />
-                  {export_all_label(@total, @export_limit)}
-                </button>
-              </div>
-              <script :type={Phoenix.LiveView.ColocatedHook} name=".Download">
-                export default {
-                  mounted() {
-                    this.handleEvent(`slab-download-${this.el.dataset.slabId}`, ({filename, content, mime}) => {
-                      const blob = new Blob([content], {type: mime || "text/csv;charset=utf-8"})
-                      const url = URL.createObjectURL(blob)
-                      const anchor = document.createElement("a")
-                      anchor.href = url
-                      anchor.download = filename
-                      document.body.appendChild(anchor)
-                      anchor.click()
-                      anchor.remove()
-                      URL.revokeObjectURL(url)
-                    })
-                  }
-                }
-              </script>
-            </div>
+          <:tab :for={entry <- @tab_entries} label={entry.label} icon={entry.icon} count={entry.count}>
+            <.tab_content
+              entry={entry}
+              id={@id}
+              uri={@uri}
+              params={@params}
+              filter_inputs={@filter_inputs}
+              column_options={@column_options}
+              paginate={@paginate}
+              total={@total}
+              export_limit={@export_limit}
+              myself={@myself}
+            />
           </:tab>
         </Slab.tabs>
       </div>
@@ -661,6 +612,111 @@ defmodule Slab.Live do
     """
   end
 
+  # Built-in tabs render their default content when the slot has no body; a
+  # body — on any tab name — takes over the panel.
+  defp tab_content(%{entry: %{slot: %{inner_block: nil}, name: "filters"}} = assigns) do
+    ~H"""
+    <div class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4">
+      <Slab.filter
+        :for={input <- @filter_inputs}
+        id={"#{@id}-filter-#{input.field}"}
+        field={input.field}
+        uri={@uri}
+        params={@params}
+        type={input.type}
+        label={input.label}
+        options={input.options}
+        placeholder={input.placeholder}
+        min_chars={input.min_chars}
+        debounce={input.debounce}
+      />
+    </div>
+    """
+  end
+
+  defp tab_content(%{entry: %{slot: %{inner_block: nil}, name: "columns"}} = assigns) do
+    ~H"""
+    <div class="flex items-center gap-x-3">
+      <div class="whitespace-nowrap text-sm text-zinc-700">Table columns</div>
+      <div class="w-full">
+        <PhoenixSelect.select
+          id={"#{@id}-columns"}
+          param="columns"
+          uri={@uri}
+          params={@params}
+          options={@column_options}
+          multiple
+          placeholder="Default columns"
+        />
+      </div>
+    </div>
+    """
+  end
+
+  defp tab_content(%{entry: %{slot: %{inner_block: nil}, name: "share"}} = assigns) do
+    ~H"""
+    <Slab.share id={"#{@id}-share"} uri={@uri} />
+    """
+  end
+
+  defp tab_content(%{entry: %{slot: %{inner_block: nil}, name: "export"}} = assigns) do
+    ~H"""
+    <div
+      id={"#{@id}-export"}
+      phx-hook=".Download"
+      data-slab-id={@id}
+      class="flex items-center gap-x-3"
+    >
+      <div class="whitespace-nowrap text-sm text-zinc-700">Export CSV</div>
+      <div class="flex flex-wrap gap-2">
+        <button
+          type="button"
+          phx-target={@myself}
+          phx-click="export-current"
+          class={export_button_class()}
+        >
+          <.icon type="arrow-down-tray-outline" class="h-4 w-4 text-cyan-600" />
+          Download current page
+        </button>
+        <button
+          :if={@paginate}
+          type="button"
+          phx-target={@myself}
+          phx-click="export-limit"
+          phx-disable-with="Preparing download..."
+          class={export_button_class()}
+        >
+          <.icon type="arrow-down-tray-outline" class="h-4 w-4 text-cyan-600" />
+          {export_all_label(@total, @export_limit)}
+        </button>
+      </div>
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".Download">
+        export default {
+          mounted() {
+            this.handleEvent(`slab-download-${this.el.dataset.slabId}`, ({filename, content, mime}) => {
+              const blob = new Blob([content], {type: mime || "text/csv;charset=utf-8"})
+              const url = URL.createObjectURL(blob)
+              const anchor = document.createElement("a")
+              anchor.href = url
+              anchor.download = filename
+              document.body.appendChild(anchor)
+              anchor.click()
+              anchor.remove()
+              URL.revokeObjectURL(url)
+            })
+          }
+        }
+      </script>
+    </div>
+    """
+  end
+
+  defp tab_content(assigns) do
+    ~H"""
+    {render_slot(@entry.slot)}
+    """
+  end
+
   defp pager_edge_class(side, kind) do
     rounding = if side == :prev, do: "rounded-l-md", else: "rounded-r-md"
 
@@ -748,8 +804,8 @@ defmodule Slab.Live do
     params = Map.drop(assigns.params, ["page", "per_page", "after"])
 
     opts = %{
-      sortable_fields: sortable_fields(assigns.col),
-      filterable_cols: filterable_cols(assigns.col),
+      sortable_fields: sortable_fields(assigns.column),
+      filterable_cols: filterable_cols(assigns.filter),
       paginate: :page,
       per_page: assigns.export_limit,
       max_per_page: assigns.export_limit

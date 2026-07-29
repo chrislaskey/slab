@@ -31,34 +31,35 @@ defmodule DemoWeb.UsersLive do
 
         <h1 class="text-xl font-semibold">Users</h1>
 
-        <Slab.table
-          id="users"
-          schema={Demo.Accounts.User}
-          uri={@uri}
-          params={@params}
-          checkable?
-          paginate={:page}
-          per_page={10}
-          columns_tab?
-          share_tab?
-          export_tab?
-        >
-          <:col field={:id} sortable />
-          <:col
-            field={:name}
-            sortable
-            filterable
-            filter_placeholder="Search names..."
-            filter_min_chars={2}
-          />
-          <:col field={:email} filterable optional />
-          <:col field={:role} sortable filterable filter_type="multiselect" />
-          <:col field={:active} filterable />
-          <:col field={:inserted_at} sortable />
-          <:col field={:updated_at} optional />
-          <:col :let={user} label="Actions">
+        <Slab.table id="users" schema={Demo.Accounts.User} uri={@uri} params={@params}>
+          <:tab name="filters" />
+          <:tab name="columns" />
+          <:tab name="share" />
+          <:tab name="export" />
+          <:tab name="help" label="Help" icon="bookmark-outline">
+            <p class="text-sm text-gray-600">
+              A custom tab — declare any name with a label and a body.
+            </p>
+          </:tab>
+
+          <:filter field={:name} placeholder="Search names..." min_chars={2} />
+          <:filter field={:email} />
+          <:filter field={:role} type="multiselect" />
+          <:filter field={:active} />
+
+          <:column_checkbox />
+          <:column field={:id} sortable />
+          <:column field={:name} sortable />
+          <:column field={:email} optional />
+          <:column field={:role} sortable />
+          <:column field={:active} />
+          <:column field={:inserted_at} sortable />
+          <:column field={:updated_at} optional />
+          <:column :let={user} label="Actions">
             <span class="text-cyan-600">Edit {user.name}</span>
-          </:col>
+          </:column>
+
+          <:pagination mode={:page} per_page={10} />
         </Slab.table>
 
         <p :if={Slab.checked?(@params)} class="text-sm text-gray-600">

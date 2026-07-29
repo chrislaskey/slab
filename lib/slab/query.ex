@@ -150,6 +150,34 @@ defmodule Slab.Query do
 
     def enum_values(_schema, _field), do: nil
 
+    @doc """
+    Returns the default filter input `{type, options}` for a schema field —
+    booleans and `Ecto.Enum` fields get a select with derived options,
+    everything else a text input. Backs `Slab.filter/1` and the Filters tab
+    when a `<:filter>` declares no explicit type.
+    """
+    def filter_input_defaults(schema, field) when is_atom(schema) and not is_nil(schema) do
+      cond do
+        schema.__schema__(:type, field) == :boolean ->
+          {"select", [{"True", "true"}, {"False", "false"}]}
+
+        values = enum_values(schema, field) ->
+          {"select", Enum.map(values, fn value -> {humanize(value), to_string(value)} end)}
+
+        true ->
+          {"text", []}
+      end
+    end
+
+    def filter_input_defaults(_schema, _field), do: {"text", []}
+
+    defp humanize(value) do
+      value
+      |> to_string()
+      |> String.split("_")
+      |> Enum.map_join(" ", &String.capitalize/1)
+    end
+
     defp apply_filter(queryable, _col, empty, _schema) when empty in [nil, ""], do: queryable
 
     defp apply_filter(queryable, %{filter: custom}, value, _schema)
@@ -355,5 +383,7 @@ defmodule Slab.Query do
     def schema_module(_queryable), do: nil
 
     def enum_values(_schema, _field), do: nil
+
+    def filter_input_defaults(_schema, _field), do: {"text", []}
   end
 end

@@ -39,20 +39,15 @@ defmodule DemoWeb.FeedLive do
           stay stable.
         </p>
 
-        <Slab.table
-          id="feed"
-          schema={Demo.Accounts.User}
-          uri={@uri}
-          params={@params}
-          paginate={:cursor}
-          per_page={10}
-          export_tab?
-          export_limit={100}
-        >
-          <:col field={:id} />
-          <:col field={:name} />
-          <:col field={:role} />
-          <:col field={:inserted_at} sortable />
+        <Slab.table id="feed" schema={Demo.Accounts.User} uri={@uri} params={@params}>
+          <:tab name="export" limit={100} />
+
+          <:column field={:id} />
+          <:column field={:name} />
+          <:column field={:role} />
+          <:column field={:inserted_at} sortable />
+
+          <:pagination mode={:cursor} per_page={10} />
         </Slab.table>
       </div>
     </Layouts.app>

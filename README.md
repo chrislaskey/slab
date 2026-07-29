@@ -6,17 +6,21 @@
 
 > A data table component for Phoenix LiveView.
 
-Pass records and column slots, get a rendered table with:
+A table is composed from slots — every optional region is declared by the
+presence of a slot, and nothing renders that wasn't declared:
 
-- **Automatic cell rendering** based on Ecto schema field types — booleans render
-  as check/x icons, datetimes render with absolute and relative formats, UUIDs
-  are truncated with a full-value hover tooltip, maps render as code blocks,
-  string arrays render one item per line.
-- **Custom cell rendering** via `<:col>` slot bodies.
-- **Sortable column headers** rendered as patch links that set `sort` and
-  `sort_direction` query params on the URL.
-- **Row selection** (checkboxes) stored in the URL query string, so selections
-  survive navigation, pagination, and refreshes — and are shareable as links.
+- **`<:column>`** — automatic cell rendering based on Ecto schema field types
+  (booleans render as check/x icons, datetimes with absolute and relative
+  formats, UUIDs truncated with a full-value hover tooltip, maps as code
+  blocks), custom bodies, and URL-driven sorting.
+- **`<:column_checkbox>`** — row selection stored in the URL query string, so
+  selections survive navigation, pagination, and refreshes — and are
+  shareable as links.
+- **`<:filter>`** — declarative, whitelisted filtering driven by `filter[...]`
+  URL params, with ready-made inputs.
+- **`<:tab>`** — a tab bar above the table: Filters, Columns, Share, Export,
+  or fully custom tabs, in declaration order.
+- **`<:pagination>`** — offset or keyset pagination.
 
 Table state lives in the URL: the component patches query params, and the
 parent LiveView reacts to `handle_params/3` by requerying. Callers pass in the
@@ -43,15 +47,16 @@ Add `slab` to your dependencies in `mix.exs` (requires LiveView `~> 1.1`):
 ```elixir
 def deps do
   [
-    {:slab, github: "chrislaskey/slab"}
+    {:slab, "~> 2.0"}
   ]
 end
 ```
 
 ### JavaScript hooks
 
-Slab ships a small amount of JavaScript (the share tab's copy-to-clipboard
-button) as a colocated hook, and select/multiselect filters are rendered by
+Slab ships a small amount of JavaScript (the Share tab's copy-to-clipboard
+button and the Export tab's download trigger) as colocated hooks, and
+select/multiselect filters are rendered by
 [phoenix_select](https://github.com/chrislaskey/phoenix_select) (pulled in
 automatically), which does the same — nothing to `npm install`, but both
 hook sets must be registered once in `assets/js/app.js`:
@@ -90,17 +95,17 @@ content: [
 
 ## Usage
 
-Render a table with `Slab.table/1`, defining columns as `<:col>` slots. Data
-comes from one of two modes.
+Render a table with `Slab.table/1`, defining columns as `<:column>` slots.
+Data comes from one of two modes.
 
 **List mode** — pass pre-fetched records via `data`:
 
 ```heex
 <Slab.table id="users-table" data={@users} schema={MyApp.User}>
-  <:col field={:id} />
-  <:col field={:name} />
-  <:col field={:email} />
-  <:col field={:inserted_at} />
+  <:column field={:id} />
+  <:column field={:name} />
+  <:column field={:email} />
+  <:column field={:inserted_at} />
 </Slab.table>
 ```
 
@@ -110,8 +115,8 @@ source to query (an `Ecto.Schema` module or an `%Ecto.Query{}`), run through
 
 ```heex
 <Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo} uri={@uri} params={@params}>
-  <:col field={:name} sortable />
-  <:col field={:email} />
+  <:column field={:name} sortable />
+  <:column field={:email} />
 </Slab.table>
 ```
 
@@ -122,7 +127,8 @@ config :slab, repo: MyApp.Repo
 ```
 
 Passing an `%Ecto.Query{}` lets you scope what the table can ever see
-(authorization, multi-tenancy) while Slab layers sorting on top:
+(authorization, multi-tenancy) while Slab layers sorting and filtering on
+top:
 
 ```heex
 <Slab.table id="users-table" schema={from u in User, where: u.org_id == ^@org.id} ...>
@@ -131,7 +137,7 @@ Passing an `%Ecto.Query{}` lets you scope what the table can ever see
 Query mode requires Ecto, which is an optional dependency — your app's Ecto
 version is used as-is. List mode works without Ecto entirely.
 
-A `<:col>` with no body renders the record's `field` automatically.
+A `<:column>` with no body renders the record's `field` automatically.
 
 ### Automatic type-based rendering
 
@@ -141,16 +147,16 @@ mode the schema is already known, so typed rendering is automatic.
 
 ### Custom cell rendering
 
-Give a `<:col>` a body to take over rendering — the body receives the record
-via `:let`. A `field` is optional: omit it for virtual columns like actions,
-and give the column a `label` instead:
+Give a `<:column>` a body to take over rendering — the body receives the
+record via `:let`. A `field` is optional: omit it for virtual columns like
+actions, and give the column a `label` instead:
 
 ```heex
 <Slab.table id="users-table" data={@users}>
-  <:col :let={user} field={:status}>{String.upcase(user.status)}</:col>
-  <:col :let={user} label="Actions">
+  <:column :let={user} field={:status}>{String.upcase(user.status)}</:column>
+  <:column :let={user} label="Actions">
     <.link navigate={~p"/users/#{user}/edit"}>Edit</.link>
-  </:col>
+  </:column>
 </Slab.table>
 ```
 
@@ -178,20 +184,23 @@ end
 
 ```heex
 <Slab.table id="users-table" data={@users} uri={@uri} params={@params}>
-  <:col field={:name} sortable />
-  <:col field={:email} sortable />
+  <:column field={:name} sortable />
+  <:column field={:email} sortable />
 </Slab.table>
 ```
 
 ### Filtering
 
-Mark columns as `filterable` and Slab translates `filter` URL params into
-WHERE conditions in query mode:
+Declare a `<:filter>` per filterable field and Slab translates `filter` URL
+params into WHERE conditions in query mode:
 
 ```heex
 <Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo} uri={@uri} params={@params}>
-  <:col field={:name} filterable />
-  <:col field={:inserted_at} filterable />
+  <:tab name="filters" />
+  <:filter field={:name} />
+  <:filter field={:inserted_at} />
+  <:column field={:name} />
+  <:column field={:inserted_at} />
 </Slab.table>
 ```
 
@@ -204,16 +213,18 @@ WHERE conditions in query mode:
 Values are cast with `Ecto.Type.cast/2` against the schema's field types —
 strings match with a case-insensitive contains, other types by equality, and
 `filter[field][op]=` enables `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, and
-`contains`. Only declared columns are ever filtered; invalid values, unknown
+`contains`. Only declared fields are ever filtered; invalid values, unknown
 operators, and LIKE wildcards in user input are all neutralized.
 
+Filters are field-level, not column-level — a `<:filter>` needs no matching
+`<:column>`, so you can filter on fields the table never shows.
+
 For custom logic — full-text search, filtering through associations — pass a
-2-arity `filter_query` function instead. It receives the queryable and the
-raw param value, and can add joins or any Ecto condition (a `filter_query`
-function implies `filterable`):
+2-arity `query` function. It receives the queryable and the raw param value,
+and can add joins or any Ecto condition:
 
 ```heex
-<:col field={:organization} filter_query={fn query, value ->
+<:filter field={:organization} query={fn query, value ->
   from u in query,
     join: o in assoc(u, :organization),
     where: ilike(o.name, ^"%#{value}%")
@@ -222,29 +233,17 @@ end} />
 
 ### Filter inputs
 
-`Slab.filter/1` renders a ready-made filter input that drives the
-`filter[field]` param — point it at a filterable column and the table
-requeries as the user types or selects:
+Each `<:filter>` defines its input in the Filters tab (declare
+`<:tab name="filters" />` to render it). Input types derive from the
+schema — booleans and `Ecto.Enum` fields get a select with derived options,
+everything else a text input — and the `type`, `label`, `options`,
+`placeholder`, `min_chars`, and `debounce` attrs override the defaults:
 
 ```heex
-<div class="flex gap-x-4">
-  <Slab.filter id="filter-name" field={:name} uri={@uri} params={@params}
-    label="Name" placeholder="Search names..." min_chars={3} />
-
-  <Slab.filter id="filter-active" field={:active} uri={@uri} params={@params}
-    type="select" label="Status"
-    options={[{"Active", "true"}, {"Inactive", "false"}]} />
-
-  <Slab.filter id="filter-role" field={:role} uri={@uri} params={@params}
-    type="multiselect" label="Roles"
-    options={[{"Admin", "admin"}, {"Member", "member"}, {"Guest", "guest"}]} />
-</div>
-
-<Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo} uri={@uri} params={@params}>
-  <:col field={:name} filterable sortable />
-  <:col field={:active} filterable />
-  <:col field={:role} filterable />
-</Slab.table>
+<:tab name="filters" />
+<:filter field={:name} placeholder="Search names..." min_chars={2} />
+<:filter field={:role} type="multiselect" />
+<:filter field={:active} type="select" options={[{"Active", "true"}, {"Inactive", "false"}]} />
 ```
 
 Text inputs debounce (default 300ms) and can wait for `min_chars` before
@@ -254,25 +253,55 @@ clearing the selection clears the filter, and multiselect values filter with
 `field IN (...)`. Remember the one-time hook registration from the
 installation section.
 
-Prefer your own markup? Build filter UIs in the parent with
-`Slab.filter_path/3`, which sets the param and resets pagination. For
-anything beyond per-field filters, scope the `schema` query itself — the
-escape hatch always works.
+### External filter UI
+
+The contract between filter UI and the table is the URL — any component that
+patches `filter[field]` params drives the table, which only requires the
+field to be whitelisted by a `<:filter>`. Declare a filter as
+`type="hidden"` to whitelist it without rendering an input, and place
+`Slab.filter/1` (or your own component) anywhere on the page:
+
+```heex
+<div class="flex gap-x-4">
+  <Slab.filter id="filter-name" schema={MyApp.User} field={:name}
+    uri={@uri} params={@params} label="Name" placeholder="Search names..." />
+  <Slab.filter id="filter-role" schema={MyApp.User} field={:role}
+    uri={@uri} params={@params} label="Role" />
+</div>
+
+<Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo} uri={@uri} params={@params}>
+  <:filter field={:name} type="hidden" />
+  <:filter field={:role} type="hidden" />
+  <:column field={:name} sortable />
+  <:column field={:role} />
+</Slab.table>
+```
+
+`Slab.filter/1` derives its input type and options from the optional
+`schema` attr, exactly like the Filters tab does.
+
+Components not owned by Slab integrate the same way: patch the URL with
+`filter[field]=value` (or `filter[field][]=value` for multi-selects, and
+`filter[field][op]=value` for operators) — `Slab.filter_path/3` builds those
+paths and resets pagination. Because state stays in the URL, sharing,
+back-button, and exports keep working with any filter UI. For anything
+beyond per-field filters, scope the `schema` query itself — the escape hatch
+always works.
 
 ### Pagination
 
-Pass `paginate` with one of two modes.
+Declare a `<:pagination>` slot with one of two modes.
 
 `:page` is classic offset pagination driven by `page` and `per_page` URL
 params. It works in both data modes — in list mode the list is sliced in
-memory. The `per_page` attribute sets the default page size; a `per_page`
-URL param can override it but is clamped to `max_per_page` (default 100), so
-a crafted URL can't request unbounded rows:
+memory. The `per_page` attr sets the default page size; a `per_page` URL
+param can override it but is clamped to `max_per_page` (default 100), so a
+crafted URL can't request unbounded rows:
 
 ```heex
-<Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo}
-  paginate={:page} per_page={25} uri={@uri} params={@params}>
-  <:col field={:name} />
+<Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo} uri={@uri} params={@params}>
+  <:column field={:name} />
+  <:pagination mode={:page} per_page={25} />
 </Slab.table>
 ```
 
@@ -283,9 +312,9 @@ records land, avoid deep-offset scans, and need no count query. Query mode
 only; navigation is First/Next (no random page access):
 
 ```heex
-<Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo}
-  paginate={:cursor} per_page={25} uri={@uri} params={@params}>
-  <:col field={:inserted_at} sortable />
+<Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo} uri={@uri} params={@params}>
+  <:column field={:inserted_at} sortable />
+  <:pagination mode={:cursor} per_page={25} />
 </Slab.table>
 ```
 
@@ -298,39 +327,39 @@ pagination in either mode.
 
 Page mode renders a full footer: a "Showing 1 to 25 of 223 entries" summary
 on the left, numbered page links with ellipses (`1 … 4 5 6 … 21`) and
-prev/next chevrons, and a page-size dropdown (`per_page_options`, default
+prev/next chevrons, and a page-size dropdown (the `options` attr, default
 `[10, 25, 50, 100]`). The total comes from a count query cached on the
 current filters — page and sort changes never re-count, only filter changes
 do. Cursor mode never runs a count query at all; both modes detect a next
 page by fetching one extra record.
 
-### Tabs and sharing
+### Tabs
 
-A tab bar above the table is derived automatically from the table
-definition — nothing to declare:
+Declare `<:tab>` slots to render a tab bar above the table. Tabs render in
+declaration order. Four names have built-in content:
 
-- a **Filters** tab appears when any `<:col>` is `filterable`, containing
-  one input per filterable column and a badge with the active filter count.
-  Input types derive from the schema — booleans and `Ecto.Enum` fields get
-  a select with derived options, everything else a text input — and the
-  col's `filter_type`, `filter_options`, `filter_placeholder`, and
-  `filter_min_chars` attrs override the defaults:
+- **`<:tab name="filters" />`** — one input per non-hidden `<:filter>`, with
+  a badge showing the active filter count; requires `uri`
+- **`<:tab name="columns" />`** — a picker driving the `columns[]` URL param
+  (see the next section); requires `uri`
+- **`<:tab name="share" />`** — a read-only copy of the current URL with a
+  copy-to-clipboard button — meaningful because *all* table state lives in
+  the URL; requires `uri`
+- **`<:tab name="export" />`** — CSV downloads (see
+  [Exporting](#exporting)); takes a `limit` attr
 
-  ```heex
-  <:col field={:role} filterable filter_type="multiselect" />
-  <:col field={:name} filterable filter_placeholder="Search names..." filter_min_chars={2} />
-  ```
+A body on a built-in tab replaces its default content (badge counts stay
+params-derived either way), and any other `name` defines a custom tab —
+give it a `label`, an optional `icon` and `count`, and a body:
 
-- a **Columns** tab appears when `columns_tab?` is set and `uri` is given
-  (see the next section)
+```heex
+<:tab name="filters" />
+<:tab name="help" label="Help" icon="bookmark-outline">
+  <p>Contact #data-team for access questions.</p>
+</:tab>
+```
 
-- a **Share** tab appears when `share_tab?` is set and `uri` is given,
-  holding a read-only copy of the current URL with a copy-to-clipboard
-  button — meaningful because *all* table state lives in the URL
-
-- an **Export** tab appears when `export_tab?` is set (see the next section)
-
-No qualifying tabs, no tab bar. The building blocks stay public for custom
+No `<:tab>` slots, no tab bar. The building blocks stay public for custom
 layouts outside the table: `Slab.tabs/1` (client-side tabs with icons and
 count badges), `Slab.share/1`, and `Slab.filter/1`, plus the badge helpers
 `Slab.get_filter_count/1` and `Slab.Helpers.URI.get_query_param_count/1`.
@@ -343,14 +372,15 @@ Slab's hooks (see [JavaScript hooks](#javascript-hooks)). It offers two
 buttons:
 
 - **Download current page** — the rows exactly as displayed
-- **Download all data** — the first `export_limit` rows (default 1000) of
-  the current filtered, sorted result; when the total exceeds the limit
-  the button reads "Download first N rows" instead
+- **Download all data** — the first `limit` rows (default 1000) of the
+  current filtered, sorted result; when the total exceeds the limit the
+  button reads "Download first N rows" instead
 
 ```heex
-<Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo}
-  paginate={:page} export_tab? export_limit={5000} uri={@uri} params={@params}>
-  <:col field={:name} />
+<Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo} uri={@uri} params={@params}>
+  <:tab name="export" limit={5000} />
+  <:column field={:name} />
+  <:pagination mode={:page} />
 </Slab.table>
 ```
 
@@ -361,8 +391,8 @@ action links) are skipped. `Slab.Export.csv/2` is public for reuse in
 custom export code.
 
 The file travels over the LiveView socket as part of a `push_event`, which
-is what makes the zero-setup delivery possible — and why `export_limit`
-should stay in the thousands. For genuinely large exports, stream from a
+is what makes the zero-setup delivery possible — and why `limit` should
+stay in the thousands. For genuinely large exports, stream from a
 controller instead: reuse `Slab.Query.apply_filters/4` and
 `Slab.Query.apply_sort/3` to reconstruct the query from the same URL
 params, and `Slab.Export.csv/2` to serialize each batch.
@@ -382,9 +412,10 @@ are ignored, and no matches falls back to the default view. With no param,
 columns render in declaration order minus those marked `optional`:
 
 ```heex
-<Slab.table id="users-table" ... columns_tab?>
-  <:col field={:name} />
-  <:col field={:email} optional />
+<Slab.table id="users-table" ...>
+  <:tab name="columns" />
+  <:column field={:name} />
+  <:column field={:email} optional />
 </Slab.table>
 ```
 
@@ -395,13 +426,15 @@ column's filter still applies.
 
 ### Row selection
 
-Track the current URI in `handle_params/3` (as above) and pass it along with
-`checkable?`:
+Declare `<:column_checkbox />` and pass the current `uri`. It renders as the
+first column, always visible — it is not addressable through the Columns tab
+or the `columns[]` param:
 
 ```heex
-<Slab.table id="users-table" data={@users} checkable? uri={@uri}>
-  <:col field={:name} />
-  <:col field={:email} />
+<Slab.table id="users-table" data={@users} uri={@uri}>
+  <:column_checkbox />
+  <:column field={:name} />
+  <:column field={:email} />
 </Slab.table>
 ```
 
@@ -431,51 +464,74 @@ HexDocs. The tables below are the quick version.
 | `data` | `nil` | `data={@users}` | Pre-fetched records (list mode); omit for query mode |
 | `schema` | `nil` | `schema={MyApp.User}` | Rendering hint in list mode; the queryable (schema module or `%Ecto.Query{}`) in query mode |
 | `repo` | `nil` | `repo={MyApp.Repo}` | Repo for query mode; falls back to `config :slab, repo: MyApp.Repo` |
-| `uri` | `nil` | `uri={@uri}` | Current request URI from `handle_params/3`; enables sorting, selection, pagination |
-| `params` | `%{}` | `params={@params}` | Current request params from `handle_params/3`; carries sort/page/filter state |
-| `checkable?` | `false` | `checkable?` | Row-selection checkboxes; requires `uri` |
-| `paginate` | `nil` | `paginate={:page}` | `:page` (offset, both modes) or `:cursor` (keyset, query mode only); requires `uri` |
-| `per_page` | `25` | `per_page={50}` | Default page size |
-| `max_per_page` | `100` | `max_per_page={200}` | Upper clamp for the URL `per_page` param, so a crafted URL can't request unbounded rows |
-| `per_page_options` | `[10, 25, 50, 100]` | `per_page_options={[25, 100]}` | Page sizes offered in the footer dropdown (page mode) |
-| `share_tab?` | `false` | `share_tab?` | Shows the Share tab above the table when `uri` is present |
-| `columns_tab?` | `false` | `columns_tab?` | Shows the Columns tab, letting users toggle and reorder columns via `columns[]` |
-| `export_tab?` | `false` | `export_tab?` | Shows the Export tab with CSV downloads of the current page or the filtered result |
-| `export_limit` | `1000` | `export_limit={5000}` | Maximum rows in a full-data export; the file travels over the LiveView socket, so keep it modest |
+| `uri` | `nil` | `uri={@uri}` | Current request URI from `handle_params/3`; required by URL-driven slots |
+| `params` | `%{}` | `params={@params}` | Current request params from `handle_params/3`; carries sort/page/filter/column/selection state |
 
-### `<:col>` slot attributes
+### `<:column>` slot attributes
 
 | Attribute | Default | Example | Description |
 | --- | --- | --- | --- |
 | `field` | `nil` | `field={:name}` | Record field to render; optional for virtual columns with a body |
 | `label` | humanized field | `label="Full Name"` | Column header text |
 | `sortable` | `false` | `sortable` | Header becomes a sort patch link; whitelists the field for `ORDER BY` in query mode |
-| `filterable` | `false` | `filterable` | Whitelists the field for `filter[...]` URL params in query mode and adds an input to the Filters tab |
-| `filter_query` | `nil` | `filter_query={&by_org/2}` | Custom 2-arity `(queryable, value) -> queryable` filter; implies `filterable`, may join associations |
-| `filter_type` | derived | `filter_type="multiselect"` | Filters tab input type (`"text"`, `"select"`, `"multiselect"`); defaults by schema type — booleans and `Ecto.Enum` get a select |
-| `filter_options` | derived | `filter_options={[{"Admin", "admin"}]}` | Options for select/multiselect inputs; derived automatically for booleans and `Ecto.Enum` fields |
-| `filter_placeholder` | `nil` | `filter_placeholder="Search..."` | Placeholder for the Filters tab input |
-| `filter_min_chars` | `0` | `filter_min_chars={3}` | Minimum characters before a text filter change applies |
 | `optional` | `false` | `optional` | Starts the column hidden until enabled via the Columns tab or `columns[]` param |
 
 Columns with a body receive the record via `:let`:
 
 ```heex
-<:col :let={user} field={:name}>{String.upcase(user.name)}</:col>
+<:column :let={user} field={:name}>{String.upcase(user.name)}</:column>
 ```
+
+### `<:column_checkbox>` slot
+
+Row-selection checkboxes, always the first column and always visible. At
+most one; requires `uri`. No attributes.
+
+### `<:filter>` slot attributes
+
+| Attribute | Default | Example | Description |
+| --- | --- | --- | --- |
+| `field` | required | `field={:name}` | Field to filter on; whitelists it for `filter[...]` URL params |
+| `label` | humanized field | `label="Full Name"` | Label for the Filters tab input |
+| `type` | derived | `type="multiselect"` | Input type (`"text"`, `"select"`, `"multiselect"`); `"hidden"` whitelists without rendering an input |
+| `options` | derived | `options={[{"Admin", "admin"}]}` | Options for select/multiselect inputs; derived automatically for booleans and `Ecto.Enum` fields |
+| `placeholder` | `nil` | `placeholder="Search..."` | Placeholder for the input |
+| `min_chars` | `0` | `min_chars={3}` | Minimum characters before a text filter change applies |
+| `debounce` | `300` | `debounce={500}` | Milliseconds to debounce text input changes |
+| `query` | `nil` | `query={&by_org/2}` | Custom 2-arity `(queryable, value) -> queryable` filter; may join associations |
+
+### `<:tab>` slot attributes
+
+| Attribute | Default | Example | Description |
+| --- | --- | --- | --- |
+| `name` | required | `name="filters"` | `"filters"`, `"columns"`, `"share"`, `"export"`, or a custom tab's identity |
+| `label` | derived | `label="Help"` | Tab label; derived for built-in names, required for custom tabs |
+| `icon` | derived | `icon="bookmark-outline"` | Icon before the label; see `Slab.Components.icon/1` |
+| `count` | derived | `count={3}` | Badge count for custom tabs; built-in tabs compute their own |
+| `limit` | `1000` | `limit={5000}` | Export only: maximum rows in a full-data export |
+
+### `<:pagination>` slot attributes
+
+| Attribute | Default | Example | Description |
+| --- | --- | --- | --- |
+| `mode` | required | `mode={:page}` | `:page` (offset, both modes) or `:cursor` (keyset, query mode only); requires `uri` |
+| `per_page` | `25` | `per_page={50}` | Default page size |
+| `max_per_page` | `100` | `max_per_page={200}` | Upper clamp for the URL `per_page` param, so a crafted URL can't request unbounded rows |
+| `options` | `[10, 25, 50, 100]` | `options={[25, 100]}` | Page sizes offered in the footer dropdown (page mode) |
 
 ### `Slab.filter/1` attributes
 
 | Attribute | Default | Example | Description |
 | --- | --- | --- | --- |
 | `id` | required | `id="filter-name"` | Unique component id |
-| `field` | required | `field={:name}` | Filter key; matches a `<:col filterable>` field |
+| `field` | required | `field={:name}` | Filter key; matches a `<:filter>` field on the table |
 | `uri` | required | `uri={@uri}` | Current request URI from `handle_params/3` |
 | `params` | `%{}` | `params={@params}` | Current request params; carries the input's current value |
-| `type` | `"text"` | `type="multiselect"` | `"text"`, `"select"`, or `"multiselect"` |
-| `label` | `nil` | `label="Status"` | Label rendered above the input |
+| `schema` | `nil` | `schema={MyApp.User}` | Derives the input type and options when not given |
+| `type` | derived | `type="multiselect"` | `"text"`, `"select"`, or `"multiselect"`; derived from `schema` when omitted |
+| `label` | `nil` | `label="Status"` | Label rendered beside the input |
 | `placeholder` | `nil` | `placeholder="Search..."` | Placeholder for the input |
-| `options` | `[]` | `options={[{"Active", "true"}]}` | Select options, as `[{label, value}]` tuples or plain values |
+| `options` | derived | `options={[{"Active", "true"}]}` | Select options, as `[{label, value}]` tuples or plain values |
 | `debounce` | `300` | `debounce={500}` | Milliseconds to debounce text input changes |
 | `min_chars` | `0` | `min_chars={3}` | Minimum characters before a text change applies; empty always applies (clearing the filter) |
 
@@ -534,6 +590,11 @@ selection, and in query mode the data fetching itself — queries only re-run
 when their inputs (source, repo, sort) actually change, not on every parent
 re-render. Sorting needs no events at all: headers are plain patch links
 built with `Slab.sort_path/3`.
+
+Cross-slot reads are the core of the design: because every slot is a sibling
+under one component, the Filters tab reads the `<:filter>` declarations, the
+Columns tab and exports read the `<:column>` declarations, and the query
+whitelists derive from both — one declaration, consistently enforced.
 
 ## Testing
 

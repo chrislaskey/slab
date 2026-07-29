@@ -127,6 +127,91 @@ defmodule SlabFilterTest do
     end
   end
 
+  describe "filter/1 schema derivation" do
+    defmodule User do
+      use Ecto.Schema
+
+      schema "users" do
+        field(:name, :string)
+        field(:active, :boolean)
+        field(:role, Ecto.Enum, values: [:admin, :member])
+      end
+    end
+
+    test "derives a select with options for Ecto.Enum fields" do
+      html =
+        render_component(
+          fn assigns ->
+            ~H"""
+            <Slab.filter id="filter-role" schema={SlabFilterTest.User} field={:role} uri={@uri} params={@params} />
+            """
+          end,
+          uri: "https://example.com/users",
+          params: %{}
+        )
+
+      assert html =~ ~s(role="combobox")
+      assert html =~ ~s(data-ps-option="admin")
+      assert html =~ ~s(data-ps-option="member")
+      assert html =~ "Admin"
+    end
+
+    test "derives a True/False select for boolean fields" do
+      html =
+        render_component(
+          fn assigns ->
+            ~H"""
+            <Slab.filter id="filter-active" schema={SlabFilterTest.User} field={:active} uri={@uri} params={@params} />
+            """
+          end,
+          uri: "https://example.com/users",
+          params: %{}
+        )
+
+      assert html =~ ~s(data-ps-option="true")
+      assert html =~ ~s(data-ps-option="false")
+    end
+
+    test "derives a text input for string fields" do
+      html =
+        render_component(
+          fn assigns ->
+            ~H"""
+            <Slab.filter id="filter-name" schema={SlabFilterTest.User} field={:name} uri={@uri} params={@params} />
+            """
+          end,
+          uri: "https://example.com/users",
+          params: %{}
+        )
+
+      assert html =~ ~s(id="filter-name-form")
+      assert html =~ ~s(phx-change="change")
+    end
+
+    test "an explicit type wins over the derived one" do
+      html =
+        render_component(
+          fn assigns ->
+            ~H"""
+            <Slab.filter
+              id="filter-active"
+              schema={SlabFilterTest.User}
+              field={:active}
+              type="text"
+              uri={@uri}
+              params={@params}
+            />
+            """
+          end,
+          uri: "https://example.com/users",
+          params: %{}
+        )
+
+      assert html =~ ~s(id="filter-active-form")
+      refute html =~ ~s(role="combobox")
+    end
+  end
+
   describe "apply_change?/2" do
     test "empty always applies, clearing the filter" do
       assert Slab.FilterLive.apply_change?("", 3)
