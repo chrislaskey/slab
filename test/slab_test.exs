@@ -692,9 +692,9 @@ defmodule SlabTest do
       assert html =~ ~s(href="/users")
       assert html =~ ~s(href="/users?page=3")
 
-      # Summary window follows the page
-      assert html =~ ">3</span>"
-      assert html =~ ">4</span>"
+      # The number window follows the page: current ±1, so page 2 links to
+      # page 3 but not page 4
+      refute html =~ ~s(href="/users?page=4")
     end
 
     test "paginates list-mode data in memory" do

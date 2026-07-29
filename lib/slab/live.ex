@@ -384,13 +384,13 @@ defmodule Slab.Live do
   defp showing_to(total, _page, _per_page) when total in [nil, 0], do: 0
   defp showing_to(total, page, per_page), do: min(page * per_page, total)
 
-  # Numbered page links: first and last page, the current page ±2, with
-  # ellipses covering the gaps — e.g. [1, "…", 4, 5, 6, "…", 20].
+  # Numbered page links: first and last page, the current page ±1, with
+  # ellipses covering the gaps — e.g. [1, "…", 5, 6, 7, "…", 20].
   defp page_numbers(:page, page, total_pages) do
     first = MapSet.new([1])
     last = MapSet.new([total_pages])
-    middle_first = max(1, page - 2)
-    middle_last = min(page + 2, total_pages)
+    middle_first = max(1, page - 1)
+    middle_last = min(page + 1, total_pages)
     middle = MapSet.new(Range.new(middle_first, middle_last))
 
     first
@@ -615,15 +615,28 @@ defmodule Slab.Live do
           </p>
         </div>
 
-        <div class="flex items-center gap-x-3">
-          <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+        <div class="flex items-center gap-x-4">
+          <form phx-target={@myself} phx-change="per-page" class="flex items-center gap-x-2">
+            <label for={"#{@id}-per-page"} class="text-sm text-gray-700">Page size</label>
+            <select
+              id={"#{@id}-per-page"}
+              name="per_page"
+              class="py-1 px-3 w-14 text-sm border border-gray-300 rounded-md bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-cyan-600"
+            >
+              <option :for={size <- @per_page_options} value={size} selected={size == @per_page_current}>
+                {size}
+              </option>
+            </select>
+          </form>
+
+          <nav class="relative z-0 inline-flex rounded-md -space-x-px" aria-label="Pagination">
             <.link :if={@prev_path} patch={@prev_path} class={pager_edge_class(:prev, :link)}>
               <span class="sr-only">Previous</span>
-              <.icon type="chevron-left-outline" class="h-5 w-5" />
+              <.icon type="chevron-left-outline" class="h-4 w-4" />
             </.link>
             <span :if={!@prev_path} class={pager_edge_class(:prev, :disabled)}>
               <span class="sr-only">Previous</span>
-              <.icon type="chevron-left-outline" class="h-5 w-5 text-gray-400" />
+              <.icon type="chevron-left-outline" class="h-4 w-4 text-gray-400" />
             </span>
 
             <%= for number <- @page_numbers do %>
@@ -646,26 +659,13 @@ defmodule Slab.Live do
 
             <.link :if={@next_path} patch={@next_path} class={pager_edge_class(:next, :link)}>
               <span class="sr-only">Next</span>
-              <.icon type="chevron-right-outline" class="h-5 w-5" />
+              <.icon type="chevron-right-outline" class="h-4 w-4" />
             </.link>
             <span :if={!@next_path} class={pager_edge_class(:next, :disabled)}>
               <span class="sr-only">Next</span>
-              <.icon type="chevron-right-outline" class="h-5 w-5 text-gray-400" />
+              <.icon type="chevron-right-outline" class="h-4 w-4 text-gray-400" />
             </span>
           </nav>
-
-          <form phx-target={@myself} phx-change="per-page" class="flex items-center gap-x-2">
-            <label for={"#{@id}-per-page"} class="text-sm text-gray-700">Page size</label>
-            <select
-              id={"#{@id}-per-page"}
-              name="per_page"
-              class="py-2 pl-3 pr-8 text-sm border border-gray-300 rounded-md bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-cyan-600"
-            >
-              <option :for={size <- @per_page_options} value={size} selected={size == @per_page_current}>
-                {size}
-              </option>
-            </select>
-          </form>
         </div>
       </div>
 
@@ -790,7 +790,7 @@ defmodule Slab.Live do
     rounding = if side == :prev, do: "rounded-l-md", else: "rounded-r-md"
 
     base =
-      "relative inline-flex items-center px-2 py-2 #{rounding} border border-gray-300 text-sm font-medium text-gray-500"
+      "relative inline-flex items-center px-2 py-1.5 #{rounding} border border-gray-300 text-xs font-medium text-gray-500"
 
     case kind do
       :link -> "#{base} bg-white hover:bg-gray-50"
@@ -799,15 +799,15 @@ defmodule Slab.Live do
   end
 
   defp pager_number_class(:ellipsis) do
-    "relative inline-flex items-center px-3 py-2 border bg-white border-gray-300 text-sm font-medium text-gray-700"
+    "relative inline-flex items-center px-3 py-1.5 border bg-white border-gray-300 text-xs font-medium text-gray-700"
   end
 
   defp pager_number_class(:current) do
-    "z-10 bg-white border-cyan-500 text-cyan-600 relative inline-flex items-center px-4 py-2 border text-sm font-medium"
+    "z-10 bg-white border-cyan-500 text-cyan-600 relative inline-flex items-center px-3 py-1.5 border text-xs font-medium"
   end
 
   defp pager_number_class(:link) do
-    "border-gray-300 bg-white text-gray-500 hover:bg-gray-50 relative inline-flex items-center px-4 py-2 border text-sm font-medium"
+    "border-gray-300 bg-white text-gray-500 hover:bg-gray-50 relative inline-flex items-center px-3 py-1.5 border text-xs font-medium"
   end
 
   @impl true
@@ -1215,9 +1215,10 @@ defmodule Slab.Live do
     """
   end
 
-  # Formats as RFC 1123, e.g. "Tue, 06 Mar 2026 01:25:19 +0000"
+  # Formats as "Tue, 06 Mar 2026 01:25:19" — no timezone offset, since the
+  # relative time rendered underneath already anchors the value
   defp format_datetime(%DateTime{} = value) do
-    Calendar.strftime(value, "%a, %d %b %Y %H:%M:%S %z")
+    Calendar.strftime(value, "%a, %d %b %Y %H:%M:%S")
   end
 
   defp format_datetime(%NaiveDateTime{} = value) do

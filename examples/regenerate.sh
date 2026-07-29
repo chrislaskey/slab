@@ -38,6 +38,10 @@ perl -0777 -pi -e 's/(defp deps do\s*\n\s*\[\n)/$1      {:slab, path: "..\/.."},
 echo "==> Replacing the default route with the demo LiveViews"
 perl -pi -e 's{get "/", PageController, :home}{live "/", UsersLive\n    live "/feed", FeedLive\n    live "/edit", EditLive}' demo/lib/demo_web/router.ex
 
+# The generated home page test asserts the default Phoenix marketing copy,
+# but the route above replaced that page with the Slab demo
+rm -f demo/test/demo_web/controllers/page_controller_test.exs
+
 echo "==> Pointing Tailwind at Slab's and PhoenixSelect's classes"
 perl -pi -e 's{\@source "\.\./\.\./lib/demo_web";}{$&\n/* Slab is a path dependency here, so point Tailwind at its source directly.\n   Apps installing slab from Hex use "../../deps/slab/lib" instead. */\n\@source "../../../../lib";\n\@source "../../deps/phoenix_select/lib";}' demo/assets/css/app.css
 

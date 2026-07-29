@@ -48,7 +48,7 @@ defmodule Slab.MixProject do
     [
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url},
-      files: ~w(lib mix.exs README.md LICENSE.md)
+      files: ~w(lib guides mix.exs README.md LICENSE.md)
     ]
   end
 
@@ -56,7 +56,15 @@ defmodule Slab.MixProject do
     [
       main: "Slab",
       source_ref: "v#{@version}",
-      extras: ["README.md"]
+      extras: [
+        "README.md",
+        "guides/usage.md",
+        "guides/reference.md",
+        "guides/development.md"
+      ],
+      groups_for_extras: [
+        Guides: ~r{guides/}
+      ]
     ]
   end
 end

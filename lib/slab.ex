@@ -910,11 +910,11 @@ defmodule Slab do
           class={tab_label_class(active_tab?(tab, index, @active))}
           phx-click={select_tab(@id, index)}
         >
-          <.icon :if={tab[:icon]} type={tab.icon} class="h-5 w-5 text-cyan-600" />
+          <.icon :if={tab[:icon]} type={tab.icon} class="h-4 w-4 text-cyan-600" />
           {tab.label}
           <div
             :if={(tab[:count] || 0) > 0}
-            class="ml-1 h-5 px-2 flex items-center justify-center text-xs bg-cyan-600/70 text-white rounded-full"
+            class="ml-1 h-4.5 px-1.5 flex items-center justify-center text-xs bg-cyan-600/70 text-white rounded-full"
           >
             {tab.count}
           </div>
@@ -937,7 +937,7 @@ defmodule Slab do
   defp active_tab?(_tab, index, nil), do: index == 0
   defp active_tab?(tab, _index, active), do: tab.label == active
 
-  @tab_label_base "px-4 py-2 flex items-center gap-x-1 cursor-pointer text-zinc-700 hover:text-cyan-600"
+  @tab_label_base "px-4 py-2 flex items-center gap-x-1 cursor-pointer text-sm text-zinc-700 hover:text-cyan-600"
   @tab_label_active "-mb-px bg-gray-50 rounded-tl rounded-tr border border-b-0 border-gray-200"
   @tab_content_base "p-4 bg-gray-50 border border-gray-200"
 
