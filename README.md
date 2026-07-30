@@ -35,19 +35,40 @@ Slab can render a simple table over records you already have with sortable colum
 
 ```heex
 <Slab.table id="users-table" data={@users} uri={@uri} params={@params}>
-  <:column field={:name} sortable />
+  <:column field={:name} />
   <:column field={:inserted_at} />
 </Slab.table>
 ```
 
-Or it can render a complex component. On the backend it can query, filter, and
-sort results directly from the database. In the UI, all state is stored in
-query params in the URL. These drive filtering, sorting, pagination, column
-layout, selection, exports, tabs, and inline editing:
+Or have Slab do the data fetching for you, which gets sorting and pagination for free:
 
 ```heex
-<Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo}
-  uri={@uri} params={@params} on_save={&save_user/2}>
+<Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo} uri={@uri} params={@params}>
+  <:column field={:name} sortable />
+  <:column field={:inserted_at} sortable />
+  <:pagination mode={:page} per_page={25} />
+</Slab.table>
+```
+
+Now add some tabs for filters and custom columns:
+
+```heex
+<Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo} uri={@uri} params={@params}>
+  <:tab name="filters" />
+  <:tab name="columns" />
+  <:filter field={:name} />
+  <:column field={:name} sortable />
+  <:column field={:inserted_at} sortable />
+  <:pagination mode={:page} per_page={25} />
+</Slab.table>
+```
+
+Slab's composition lets you continue to layer in features with declarative
+syntax. Here's an example with many additional features - inline editing, row
+selection, export to CSV, custom tabs, custom column rendering, and more:
+
+```heex
+<Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo} on_save={&save_user/2} uri={@uri} params={@params}>
   <:tab name="filters" />
   <:tab name="columns" />
   <:tab name="share" />
