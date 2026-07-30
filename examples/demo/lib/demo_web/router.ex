@@ -17,10 +17,10 @@ defmodule DemoWeb.Router do
   scope "/", DemoWeb do
     pipe_through :browser
 
-    live "/", UsersLive
+    live "/", ReadmeLive
+    live "/users", UsersLive
     live "/feed", FeedLive
     live "/edit", EditLive
-    live "/readme", ReadmeLive
     live "/users/:id/edit", EditLive
   end
 

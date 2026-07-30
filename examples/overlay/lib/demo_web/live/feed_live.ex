@@ -24,21 +24,21 @@ defmodule DemoWeb.FeedLive do
     <Layouts.app flash={@flash}>
       <div class="mx-auto max-w-5xl space-y-6">
         <nav class="flex gap-x-4 text-sm">
-          <.link navigate={~p"/"} class="text-cyan-600 hover:underline">
-            Users (page pagination)
+          <.link navigate={~p"/users"} class="text-cyan-600 hover:underline">
+            Full Example
           </.link>
-          <span class="font-semibold">Feed (cursor pagination)</span>
+          <span class="font-semibold">Feed Example</span>
           <.link navigate={~p"/edit"} class="text-cyan-600 hover:underline">
-            Edit (inline editing)
+            Edit Example
           </.link>
-          <.link navigate={~p"/readme"} class="text-cyan-600 hover:underline">
-            Readme (examples)
+          <.link navigate={~p"/"} class="text-cyan-600 hover:underline">
+            Readme Examples
           </.link>
         </nav>
 
-        <h1 class="text-xl font-semibold">Feed</h1>
+        <h1 class="text-2xl font-semibold">Feed</h1>
 
-        <p class="text-sm text-gray-600 max-w-2xl">
+        <p class="text-gray-600">
           Cursor pagination pages relative to the last-seen record instead of an
           offset. Sort by "Inserted At" and watch the <code>after</code> param
           carry the cursor. Insert new users in another tab — existing pages

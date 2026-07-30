@@ -23,19 +23,26 @@ defmodule DemoWeb.UsersLive do
     <Layouts.app flash={@flash}>
       <div class="mx-auto max-w-5xl space-y-6">
         <nav class="flex gap-x-4 text-sm">
-          <span class="font-semibold">Users (page pagination)</span>
+          <span class="font-semibold">Full Example</span>
           <.link navigate={~p"/feed"} class="text-cyan-600 hover:underline">
-            Feed (cursor pagination)
+            Feed Example
           </.link>
           <.link navigate={~p"/edit"} class="text-cyan-600 hover:underline">
-            Edit (inline editing)
+            Edit Example
           </.link>
-          <.link navigate={~p"/readme"} class="text-cyan-600 hover:underline">
-            Readme (examples)
+          <.link navigate={~p"/"} class="text-cyan-600 hover:underline">
+            Readme Examples
           </.link>
         </nav>
 
-        <h1 class="text-xl font-semibold">Users</h1>
+        <h1 class="text-2xl font-semibold">Users</h1>
+
+        <p class="text-gray-600">
+          The full feature set on one table — filter, column, share, export,
+          and custom tabs, row selection, sorting, optional columns, and page
+          pagination. Every change lives in the URL, so any view can be
+          shared or bookmarked.
+        </p>
 
         <Slab.table id="users" schema={Demo.Accounts.User} uri={@uri} params={@params}>
           <:tab name="filters" />

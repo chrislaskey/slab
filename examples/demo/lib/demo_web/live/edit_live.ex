@@ -24,21 +24,21 @@ defmodule DemoWeb.EditLive do
     <Layouts.app flash={@flash}>
       <div class="mx-auto max-w-5xl space-y-6">
         <nav class="flex gap-x-4 text-sm">
-          <.link navigate={~p"/"} class="text-cyan-600 hover:underline">
-            Users (page pagination)
+          <.link navigate={~p"/users"} class="text-cyan-600 hover:underline">
+            Full Example
           </.link>
           <.link navigate={~p"/feed"} class="text-cyan-600 hover:underline">
-            Feed (cursor pagination)
+            Feed Example
           </.link>
-          <span class="font-semibold">Edit (inline editing)</span>
-          <.link navigate={~p"/readme"} class="text-cyan-600 hover:underline">
-            Readme (examples)
+          <span class="font-semibold">Edit Example</span>
+          <.link navigate={~p"/"} class="text-cyan-600 hover:underline">
+            Readme Examples
           </.link>
         </nav>
 
-        <h1 class="text-xl font-semibold">Edit Users</h1>
+        <h1 class="text-2xl font-semibold">Edit Users</h1>
 
-        <p class="text-sm text-gray-600 max-w-2xl">
+        <p class="text-gray-600">
           Change a value and the row's save button lights up — click it (or
           press Enter) to save. Multiple columns can change before one save.
           Clear a name or break an email to see a changeset error render

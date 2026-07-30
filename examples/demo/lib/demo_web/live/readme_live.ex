@@ -114,19 +114,19 @@ defmodule DemoWeb.ReadmeLive do
     <Layouts.app flash={@flash}>
       <div class="mx-auto max-w-5xl space-y-6">
         <nav class="flex gap-x-4 text-sm">
-          <.link navigate={~p"/"} class="text-cyan-600 hover:underline">
-            Users (page pagination)
+          <.link navigate={~p"/users"} class="text-cyan-600 hover:underline">
+            Full Example
           </.link>
           <.link navigate={~p"/feed"} class="text-cyan-600 hover:underline">
-            Feed (cursor pagination)
+            Feed Example
           </.link>
           <.link navigate={~p"/edit"} class="text-cyan-600 hover:underline">
-            Edit (inline editing)
+            Edit Example
           </.link>
-          <span class="font-semibold">Readme (examples)</span>
+          <span class="font-semibold">Readme Examples</span>
         </nav>
 
-        <h1 class="text-xl font-semibold">README examples</h1>
+        <h1 class="text-2xl font-semibold">Readme examples</h1>
 
         <.example code={@example_simple}>
           <:text>
@@ -143,7 +143,13 @@ defmodule DemoWeb.ReadmeLive do
             Or have Slab do the data fetching for you, which gets sorting and
             pagination for free:
           </:text>
-          <Slab.table id="readme-query" schema={Demo.Accounts.User} repo={Demo.Repo} uri={@uri} params={@params}>
+          <Slab.table
+            id="readme-query"
+            schema={Demo.Accounts.User}
+            repo={Demo.Repo}
+            uri={@uri}
+            params={@params}
+          >
             <:column field={:name} sortable />
             <:column field={:inserted_at} sortable />
             <:pagination mode={:page} per_page={5} />
@@ -154,7 +160,13 @@ defmodule DemoWeb.ReadmeLive do
           <:text>
             Now add some tabs for filters and custom columns:
           </:text>
-          <Slab.table id="readme-tabs" schema={Demo.Accounts.User} repo={Demo.Repo} uri={@uri} params={@params}>
+          <Slab.table
+            id="readme-tabs"
+            schema={Demo.Accounts.User}
+            repo={Demo.Repo}
+            uri={@uri}
+            params={@params}
+          >
             <:tab name="filters" />
             <:tab name="columns" />
             <:filter field={:name} />
