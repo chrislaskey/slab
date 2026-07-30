@@ -68,7 +68,7 @@ syntax. Here's an example with many additional features - inline editing, row
 selection, export to CSV, custom tabs, custom column rendering, and more:
 
 ```heex
-<Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo} on_save={&save_user/2} uri={@uri} params={@params}>
+<Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo} preload={:products} on_save={&save_user/2} uri={@uri} params={@params}>
   <:tab name="filters" />
   <:tab name="columns" />
   <:tab name="share" />

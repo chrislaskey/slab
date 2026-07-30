@@ -11,7 +11,9 @@ HexDocs. The tables below are the quick version.
 | --- | --- | --- | --- |
 | `id` | required | `id="users-table"` | Unique component id |
 | `data` | `nil` | `data={@users}` | Pre-fetched records (list mode); omit for query mode |
-| `schema` | `nil` | `schema={MyApp.User}` | Rendering hint in list mode; the queryable (schema module or `%Ecto.Query{}`) in query mode |
+| `schema` | `nil` | `schema={MyApp.User}` | `Ecto.Schema` module for field reflection (typed rendering, filter inputs, casting); the default query-mode source |
+| `query` | `nil` | `query={@scoped_query}` | `Ecto.Query` used as the base of every fetch instead of the schema — scoping, joins, computed fields |
+| `preload` | `nil` | `preload={[:products]}` | Associations to preload on fetched records, in any `Ecto.Query.preload/3` shape |
 | `repo` | `nil` | `repo={MyApp.Repo}` | Repo for query mode; falls back to `config :slab, repo: MyApp.Repo` |
 | `uri` | `nil` | `uri={@uri}` | Current request URI from `handle_params/3`; required by URL-driven slots |
 | `params` | `%{}` | `params={@params}` | Current request params from `handle_params/3`; carries sort/page/filter/column/selection state |

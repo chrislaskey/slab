@@ -38,8 +38,7 @@ defmodule Slab.Live do
 
     field_types =
       assigns
-      |> Map.get(:schema)
-      |> Slab.Query.schema_module()
+      |> reflection_schema()
       |> get_field_types()
 
     socket =
@@ -72,7 +71,7 @@ defmodule Slab.Live do
   # and live in the component — they are transient state, not URL state.
   defp assign_editing(socket, assigns) do
     on_save = Map.get(assigns, :on_save)
-    schema = Slab.Query.schema_module(Map.get(assigns, :schema))
+    schema = reflection_schema(assigns)
 
     editable_cols =
       for col <- socket.assigns.visible_cols,
@@ -113,6 +112,20 @@ defmodule Slab.Live do
 
   defp slot_config(nil, _key, default), do: default
   defp slot_config(entry, key, default), do: Map.get(entry, key) || default
+
+  # Helpers - Query source
+
+  # Fetches run against the custom base query when given, the schema
+  # otherwise. The schema module backs field reflection (typed rendering,
+  # filter derivation, casting) either way — explicitly when passed,
+  # derived from the query's source when not.
+  defp source_queryable(assigns) do
+    Map.get(assigns, :query) || Map.get(assigns, :schema)
+  end
+
+  defp reflection_schema(assigns) do
+    Map.get(assigns, :schema) || Slab.Query.schema_module(Map.get(assigns, :query))
+  end
 
   # Helpers - Column visibility
 
@@ -169,7 +182,7 @@ defmodule Slab.Live do
   # own. Badge counts derive from the URL params, so they stay correct even
   # when a tab's content is replaced by a custom body.
   defp assign_tabs(socket, assigns, params, uri) do
-    schema = Slab.Query.schema_module(Map.get(assigns, :schema))
+    schema = reflection_schema(assigns)
     columns_param = Map.get(params, "columns")
 
     counts = %{
@@ -257,13 +270,15 @@ defmodule Slab.Live do
     opts = %{
       sortable_fields: sortable_fields(Map.get(assigns, :column, [])),
       filterable_cols: filterable_cols(Map.get(assigns, :filter, [])),
+      schema: reflection_schema(assigns),
+      preload: Map.get(assigns, :preload),
       paginate: Map.get(assigns, :paginate),
       per_page: Map.get(assigns, :per_page, 25),
       max_per_page: Map.get(assigns, :max_per_page, 100)
     }
 
     query_inputs = {
-      Map.get(assigns, :schema),
+      source_queryable(assigns),
       Map.get(assigns, :repo),
       Map.take(params, ["sort", "sort_direction", "page", "per_page", "after", "filter"]),
       opts
@@ -272,8 +287,8 @@ defmodule Slab.Live do
     if socket.assigns[:query_inputs] == query_inputs do
       {socket.assigns.data, socket.assigns.has_next?, query_inputs}
     else
-      {schema, repo, _params, _opts} = query_inputs
-      {data, has_next?} = Slab.Query.fetch(schema, repo, params, opts)
+      {queryable, repo, _params, _opts} = query_inputs
+      {data, has_next?} = Slab.Query.fetch(queryable, repo, params, opts)
 
       {data, has_next?, query_inputs}
     end
@@ -290,7 +305,7 @@ defmodule Slab.Live do
   defp resolve_total(assigns, params, socket) do
     if Map.get(assigns, :paginate) == :page do
       count_inputs = {
-        Map.get(assigns, :schema),
+        source_queryable(assigns),
         Map.get(assigns, :repo),
         Map.get(params, "filter")
       }
@@ -298,10 +313,11 @@ defmodule Slab.Live do
       if socket.assigns[:count_inputs] == count_inputs do
         {socket.assigns.total, count_inputs}
       else
-        {schema, repo, _filter} = count_inputs
+        {queryable, repo, _filter} = count_inputs
         filterable = filterable_cols(Map.get(assigns, :filter, []))
+        schema = reflection_schema(assigns)
 
-        {Slab.Query.count(schema, repo, params, filterable), count_inputs}
+        {Slab.Query.count(queryable, repo, params, filterable, schema), count_inputs}
       end
     else
       {nil, nil}
@@ -1027,12 +1043,16 @@ defmodule Slab.Live do
     opts = %{
       sortable_fields: sortable_fields(assigns.column),
       filterable_cols: filterable_cols(assigns.filter),
+      schema: reflection_schema(assigns),
+      preload: Map.get(assigns, :preload),
       paginate: :page,
       per_page: assigns.export_limit,
       max_per_page: assigns.export_limit
     }
 
-    {records, _has_next?} = Slab.Query.fetch(assigns.schema, assigns.repo, params, opts)
+    {records, _has_next?} =
+      Slab.Query.fetch(source_queryable(assigns), assigns.repo, params, opts)
+
     records
   end
 

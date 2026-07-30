@@ -293,12 +293,31 @@ defmodule SlabTest do
       assert html =~ "True"
     end
 
-    test "accepts an Ecto.Query and derives the schema from it" do
+    test "query replaces the schema as the base and derives reflection from it" do
       html =
         render_component(
           fn assigns ->
             ~H"""
-            <Slab.table id="test-table" schema={@query} repo={SlabTest.FakeRepo}>
+            <Slab.table id="test-table" query={@query} repo={SlabTest.FakeRepo}>
+              <:column field={:active} />
+            </Slab.table>
+            """
+          end,
+          query: from(u in User, where: not is_nil(u.name))
+        )
+
+      # The custom query is the fetch base, and the boolean renders typed —
+      # the schema was derived from the query's source
+      assert_received {:repo_all, %Ecto.Query{wheres: [_where]}}
+      assert html =~ "True"
+    end
+
+    test "an explicit schema provides reflection alongside a custom query" do
+      html =
+        render_component(
+          fn assigns ->
+            ~H"""
+            <Slab.table id="test-table" schema={SlabTest.User} query={@query} repo={SlabTest.FakeRepo}>
               <:column field={:active} />
             </Slab.table>
             """
@@ -308,6 +327,57 @@ defmodule SlabTest do
 
       assert_received {:repo_all, %Ecto.Query{wheres: [_where]}}
       assert html =~ "True"
+    end
+
+    test "preload applies to the fetch in any Ecto.Query.preload shape" do
+      render_component(
+        fn assigns ->
+          ~H"""
+          <Slab.table
+            id="test-table"
+            schema={SlabTest.User}
+            repo={SlabTest.FakeRepo}
+            preload={[:products, organization: :plan]}
+          >
+            <:column field={:name} />
+          </Slab.table>
+          """
+        end,
+        %{}
+      )
+
+      assert_received {:repo_all, %Ecto.Query{preloads: preloads}}
+      assert preloads == [:products, organization: :plan]
+    end
+
+    test "preload composes on top of a custom query" do
+      render_component(
+        fn assigns ->
+          ~H"""
+          <Slab.table id="test-table" query={@query} repo={SlabTest.FakeRepo} preload={:products}>
+            <:column field={:name} />
+          </Slab.table>
+          """
+        end,
+        query: from(u in User, where: not is_nil(u.name))
+      )
+
+      assert_received {:repo_all, %Ecto.Query{wheres: [_where], preloads: [:products]}}
+    end
+
+    test "raises when schema is not a module" do
+      assert_raise ArgumentError, ~r/schema must be an Ecto.Schema module/, fn ->
+        render_component(
+          fn assigns ->
+            ~H"""
+            <Slab.table id="test-table" schema={@query} repo={SlabTest.FakeRepo}>
+              <:column field={:name} />
+            </Slab.table>
+            """
+          end,
+          query: from(u in User, where: not is_nil(u.name))
+        )
+      end
     end
 
     test "applies sort params to the query when the field is sortable" do
@@ -422,18 +492,31 @@ defmodule SlabTest do
       end
     end
 
-    test "raises when both data and repo are given" do
-      assert_raise ArgumentError, ~r/both data and repo/, fn ->
-        render_component(
-          fn assigns ->
-            ~H"""
-            <Slab.table id="test-table" data={@data} repo={SlabTest.FakeRepo}>
-              <:column field={:name} />
-            </Slab.table>
-            """
-          end,
-          data: [%{id: 1, name: "Ada"}]
-        )
+    test "raises when data is combined with query-mode attributes" do
+      for attrs <- [
+            %{repo: SlabTest.FakeRepo},
+            %{query: from(u in User, where: not is_nil(u.name))},
+            %{preload: [:products]}
+          ] do
+        assert_raise ArgumentError, ~r/data along with query-mode attributes/, fn ->
+          render_component(
+            fn assigns ->
+              ~H"""
+              <Slab.table
+                id="test-table"
+                data={@data}
+                repo={@attrs[:repo]}
+                query={@attrs[:query]}
+                preload={@attrs[:preload]}
+              >
+                <:column field={:name} />
+              </Slab.table>
+              """
+            end,
+            data: [%{id: 1, name: "Ada"}],
+            attrs: attrs
+          )
+        end
       end
     end
   end

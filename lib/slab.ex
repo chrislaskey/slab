@@ -34,9 +34,7 @@ defmodule Slab do
         <:column field={:inserted_at} />
       </Slab.table>
 
-  **Query mode** — omit `data` and Slab fetches for you. `schema` becomes
-  the source to query (an `Ecto.Schema` module or an `%Ecto.Query{}`), run
-  through `repo`:
+  **Query mode** — omit `data` and Slab fetches the schema through `repo`:
 
       <Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo} uri={@uri} params={@params}>
         <:column field={:name} sortable />
@@ -47,11 +45,19 @@ defmodule Slab do
 
       config :slab, repo: MyApp.Repo
 
-  Passing an `%Ecto.Query{}` lets the caller scope what the table can ever
-  see (authorization, multi-tenancy) while Slab layers sorting and
-  filtering on top:
+  Preload associations for use in column bodies (or exports and saves) with
+  `preload`, in any shape `Ecto.Query.preload/3` accepts:
 
-      <Slab.table id="users-table" schema={from u in MyApp.User, where: u.org_id == ^@org.id} ...>
+      <Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo}
+        preload={[:products, organization: :plan]} uri={@uri} params={@params}>
+
+  For full control of the base query — scoping what the table can ever see
+  (authorization, multi-tenancy), joins, computed fields — pass `query` and
+  Slab layers sorting, filtering, and pagination on top. The schema is
+  derived from the query's source for field reflection, or pass `schema`
+  explicitly alongside:
+
+      <Slab.table id="users-table" query={from u in MyApp.User, where: u.org_id == ^@org.id} ...>
 
   A `<:column>` with no body renders the record's `field` automatically.
 
@@ -381,11 +387,28 @@ defmodule Slab do
     doc: "pre-fetched records to render; omit to have Slab query via schema and repo"
   )
 
-  attr(:schema, :any,
+  attr(:schema, :atom,
     default: nil,
     doc:
-      "an Ecto.Schema module or Ecto.Query; renders cell values by field type, " <>
-        "and in query mode is the source Slab fetches from"
+      "an Ecto.Schema module; renders cell values by field type, derives filter " <>
+        "inputs, casts URL values, and in query mode is the default source Slab " <>
+        "fetches from"
+  )
+
+  attr(:query, :any,
+    default: nil,
+    doc:
+      "an Ecto.Query used as the base of every fetch instead of the schema — " <>
+        "for scoping (authorization, multi-tenancy), joins, or preloads; schema " <>
+        "still provides field reflection, and is derived from the query's source " <>
+        "when omitted"
+  )
+
+  attr(:preload, :any,
+    default: nil,
+    doc:
+      "associations to preload on fetched records, in any shape " <>
+        "Ecto.Query.preload/3 accepts; applies on top of schema or query"
   )
 
   attr(:repo, :atom,
@@ -557,6 +580,8 @@ defmodule Slab do
       id={@id}
       data={@data}
       schema={@schema}
+      query={@query}
+      preload={@preload}
       repo={@repo}
       uri={@uri}
       params={@params}
@@ -1042,30 +1067,57 @@ defmodule Slab do
     """
   end
 
-  defp resolve_repo!(%{data: data, schema: schema, repo: repo}) do
-    cond do
-      is_list(data) && repo ->
-        raise ArgumentError,
-              "Slab.table received both data and repo — repo is only used in query mode. " <>
-                "Pass data with pre-fetched records, or pass schema and repo to have Slab query."
+  defp resolve_repo!(assigns) do
+    validate_schema_shape!(assigns)
 
-      is_list(data) ->
-        nil
-
-      is_nil(schema) ->
-        raise ArgumentError,
-              "Slab.table requires either data (a list of records to render) or " <>
-                "schema (an Ecto schema or query for Slab to fetch from) — neither was given."
-
-      true ->
-        repo ||
-          Application.get_env(:slab, :repo) ||
-          raise(
-            ArgumentError,
-            "Slab.table query mode requires a repo — pass repo={MyApp.Repo} or " <>
-              "set config :slab, repo: MyApp.Repo"
-          )
+    if is_list(assigns.data) do
+      validate_list_mode!(assigns)
+      nil
+    else
+      validate_query_source!(assigns)
+      query_mode_repo!(assigns)
     end
+  end
+
+  defp validate_schema_shape!(%{schema: schema}) do
+    if schema && !is_atom(schema) do
+      raise ArgumentError,
+            "Slab.table schema must be an Ecto.Schema module — pass a custom base " <>
+              "query via query={...} instead."
+    end
+
+    :ok
+  end
+
+  defp validate_list_mode!(%{repo: repo, query: query, preload: preload}) do
+    if repo || query || preload do
+      raise ArgumentError,
+            "Slab.table received data along with query-mode attributes — repo, query, " <>
+              "and preload only apply when Slab fetches. Pass data with pre-fetched " <>
+              "records, or pass schema and repo to have Slab query."
+    end
+
+    :ok
+  end
+
+  defp validate_query_source!(%{schema: schema, query: query}) do
+    if is_nil(schema) && is_nil(query) do
+      raise ArgumentError,
+            "Slab.table requires either data (a list of records to render), or " <>
+              "schema or query (a source for Slab to fetch from) — none was given."
+    end
+
+    :ok
+  end
+
+  defp query_mode_repo!(%{repo: repo}) do
+    repo ||
+      Application.get_env(:slab, :repo) ||
+      raise(
+        ArgumentError,
+        "Slab.table query mode requires a repo — pass repo={MyApp.Repo} or " <>
+          "set config :slab, repo: MyApp.Repo"
+      )
   end
 
   # Helpers - Sorting

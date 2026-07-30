@@ -28,20 +28,22 @@ defmodule Slab.Query do
       * `:sortable_fields` - atoms whitelisted for ORDER BY
       * `:filterable_cols` - columns whitelisted for WHERE, as maps of
         `%{field: atom, filter: fun | nil}`
+      * `:schema` - the `Ecto.Schema` module used for casting URL values;
+        derived from the queryable when omitted
+      * `:preload` - associations to preload, in any shape
+        `Ecto.Query.preload/3` accepts
       * `:paginate` - `nil`, `:page`, or `:cursor`
       * `:per_page` - default page size
       * `:max_per_page` - upper clamp for the URL `per_page` param
     """
     def fetch(queryable, repo, params, opts) do
       sortable_fields = Map.get(opts, :sortable_fields, [])
+      schema = Map.get(opts, :schema) || schema_module(queryable)
 
       queryable =
-        apply_filters(
-          queryable,
-          params,
-          Map.get(opts, :filterable_cols, []),
-          schema_module(queryable)
-        )
+        queryable
+        |> apply_preload(Map.get(opts, :preload))
+        |> apply_filters(params, Map.get(opts, :filterable_cols, []), schema)
 
       case Map.get(opts, :paginate) do
         nil ->
@@ -60,7 +62,6 @@ defmodule Slab.Query do
           per_page = per_page(params, opts)
           sort_field = sort_field(params, sortable_fields)
           direction = direction(params, sort_field)
-          schema = schema_module(queryable)
 
           queryable
           |> apply_cursor(params, sort_field, direction, schema)
@@ -74,11 +75,16 @@ defmodule Slab.Query do
     pagination. Backs the "Showing X to Y of Z entries" summary and the
     numbered page links in page mode.
     """
-    def count(queryable, repo, params, filterable_cols) do
+    def count(queryable, repo, params, filterable_cols, schema \\ nil) do
       queryable
-      |> apply_filters(params, filterable_cols, schema_module(queryable))
+      |> apply_filters(params, filterable_cols, schema || schema_module(queryable))
       |> repo.aggregate(:count)
     end
+
+    # Preloads never affect filtering, sorting, or pagination — they are
+    # resolved by Ecto after the main query
+    defp apply_preload(queryable, nil), do: queryable
+    defp apply_preload(queryable, preloads), do: preload(queryable, ^preloads)
 
     @doc """
     Applies `order_by` from the `sort` and `sort_direction` params.
@@ -371,7 +377,7 @@ defmodule Slab.Query do
       """
     end
 
-    def count(_queryable, _repo, _params, _filterable_cols) do
+    def count(_queryable, _repo, _params, _filterable_cols, _schema \\ nil) do
       raise "Slab query mode requires Ecto, which is not available. Add {:ecto, \"~> 3.0\"} to your dependencies."
     end
 

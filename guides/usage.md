@@ -39,9 +39,7 @@ Data comes from one of two modes.
 </Slab.table>
 ```
 
-**Query mode** — omit `data` and Slab fetches for you. `schema` becomes the
-source to query (an `Ecto.Schema` module or an `%Ecto.Query{}`), run through
-`repo`:
+**Query mode** — omit `data` and Slab fetches the schema through `repo`:
 
 ```heex
 <Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo} uri={@uri} params={@params}>
@@ -56,13 +54,25 @@ The repo can also be configured once, globally:
 config :slab, repo: MyApp.Repo
 ```
 
-Passing an `%Ecto.Query{}` lets you scope what the table can ever see
-(authorization, multi-tenancy) while Slab layers sorting and filtering on
-top:
+Preload associations for use in column bodies (or exports and saves) with
+`preload`, in any shape `Ecto.Query.preload/3` accepts:
 
 ```heex
-<Slab.table id="users-table" schema={from u in User, where: u.org_id == ^@org.id} ...>
+<Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo}
+  preload={[:products, organization: :plan]} uri={@uri} params={@params}>
 ```
+
+For full control of the base query — scoping what the table can ever see
+(authorization, multi-tenancy), joins, computed fields — pass `query` and
+Slab layers sorting, filtering, and pagination on top. The schema is derived
+from the query's source for field reflection, or pass `schema` explicitly
+alongside:
+
+```heex
+<Slab.table id="users-table" query={from u in User, where: u.org_id == ^@org.id} ...>
+```
+
+`preload` composes with `query` too, applying on top of it.
 
 Query mode requires Ecto, which is an optional dependency — your app's Ecto
 version is used as-is. List mode works without Ecto entirely.
