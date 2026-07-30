@@ -9,6 +9,9 @@ defmodule Demo.Accounts.User do
     field :role, Ecto.Enum, values: [:admin, :member, :guest]
     field :active, :boolean, default: true
 
+    belongs_to :organization, Demo.Accounts.Organization
+    has_many :products, Demo.Accounts.Product
+
     timestamps(type: :utc_datetime)
   end
 

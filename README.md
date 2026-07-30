@@ -31,7 +31,7 @@ filtering, dynamic column ordering.
 
 ## Examples
 
-Slab can render a simple table over records you already have with sortable columns:
+Slab can render a simple table over records you already have:
 
 ```heex
 <Slab.table id="users-table" data={@users} uri={@uri} params={@params}>
@@ -46,7 +46,7 @@ Or have Slab do the data fetching for you, which gets sorting and pagination for
 <Slab.table id="users-table" schema={MyApp.User} repo={MyApp.Repo} uri={@uri} params={@params}>
   <:column field={:name} sortable />
   <:column field={:inserted_at} sortable />
-  <:pagination mode={:page} per_page={25} />
+  <:pagination mode={:page} per_page={5} />
 </Slab.table>
 ```
 
@@ -59,7 +59,7 @@ Now add some tabs for filters and custom columns:
   <:filter field={:name} />
   <:column field={:name} sortable />
   <:column field={:inserted_at} sortable />
-  <:pagination mode={:page} per_page={25} />
+  <:pagination mode={:page} per_page={5} />
 </Slab.table>
 ```
 
@@ -92,13 +92,35 @@ selection, export to CSV, custom tabs, custom column rendering, and more:
     <.link navigate={~p"/users/#{user}/edit"}>Edit</.link>
   </:column>
 
-  <:pagination mode={:page} per_page={25} />
+  <:pagination mode={:page} per_page={5} />
 </Slab.table>
 ```
 
-Every piece is explained feature-by-feature in the [Usage guide](guides/usage.md),
-and there is a runnable demo app in `examples/` (see
-[Development](guides/development.md)).
+The functions referenced above — Slab passes the record and raw values, and
+the LiveView owns the queries and writes:
+
+```elixir
+defp save_user(user, params) do
+  user
+  |> MyApp.User.changeset(params)
+  |> MyApp.Repo.update()
+end
+
+defp filter_by_organization(query, value) do
+  from u in query,
+    join: o in assoc(u, :organization),
+    where: like(o.name, ^"%#{value}%")
+end
+
+defp products_export(user) do
+  Enum.map_join(user.products, ", ", & &1.name)
+end
+```
+
+Every example on this page runs live in the demo app's
+[Readme page](examples/overlay/lib/demo_web/live/readme_live.ex) — see the
+demo app below. Every piece is explained feature-by-feature in the
+[Usage guide](guides/usage.md).
 
 ## Demo app
 

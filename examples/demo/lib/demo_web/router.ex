@@ -20,6 +20,8 @@ defmodule DemoWeb.Router do
     live "/", UsersLive
     live "/feed", FeedLive
     live "/edit", EditLive
+    live "/readme", ReadmeLive
+    live "/users/:id/edit", EditLive
   end
 
   # Other scopes may use custom stacks.

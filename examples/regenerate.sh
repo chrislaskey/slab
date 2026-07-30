@@ -36,7 +36,7 @@ echo "==> Adding slab as a path dependency"
 perl -0777 -pi -e 's/(defp deps do\s*\n\s*\[\n)/$1      {:slab, path: "..\/.."},\n/' demo/mix.exs
 
 echo "==> Replacing the default route with the demo LiveViews"
-perl -pi -e 's{get "/", PageController, :home}{live "/", UsersLive\n    live "/feed", FeedLive\n    live "/edit", EditLive}' demo/lib/demo_web/router.ex
+perl -pi -e 's{get "/", PageController, :home}{live "/", UsersLive\n    live "/feed", FeedLive\n    live "/edit", EditLive\n    live "/readme", ReadmeLive\n    live "/users/:id/edit", EditLive}' demo/lib/demo_web/router.ex
 
 # The generated home page test asserts the default Phoenix marketing copy,
 # but the route above replaced that page with the Slab demo

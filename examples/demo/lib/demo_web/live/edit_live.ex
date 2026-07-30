@@ -31,6 +31,9 @@ defmodule DemoWeb.EditLive do
             Feed (cursor pagination)
           </.link>
           <span class="font-semibold">Edit (inline editing)</span>
+          <.link navigate={~p"/readme"} class="text-cyan-600 hover:underline">
+            Readme (examples)
+          </.link>
         </nav>
 
         <h1 class="text-xl font-semibold">Edit Users</h1>

@@ -30,6 +30,9 @@ defmodule DemoWeb.UsersLive do
           <.link navigate={~p"/edit"} class="text-cyan-600 hover:underline">
             Edit (inline editing)
           </.link>
+          <.link navigate={~p"/readme"} class="text-cyan-600 hover:underline">
+            Readme (examples)
+          </.link>
         </nav>
 
         <h1 class="text-xl font-semibold">Users</h1>
@@ -40,7 +43,7 @@ defmodule DemoWeb.UsersLive do
           <:tab name="share" />
           <:tab name="export" />
           <:tab name="custom" label="Custom" icon="bookmark-outline">
-            <p class="mt-1 py-2 text-sm text-gray-600">
+            <p class="text-sm text-gray-600">
               A custom tab — declare any name with a label and a body.
             </p>
           </:tab>

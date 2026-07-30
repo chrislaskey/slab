@@ -31,6 +31,9 @@ defmodule DemoWeb.FeedLive do
           <.link navigate={~p"/edit"} class="text-cyan-600 hover:underline">
             Edit (inline editing)
           </.link>
+          <.link navigate={~p"/readme"} class="text-cyan-600 hover:underline">
+            Readme (examples)
+          </.link>
         </nav>
 
         <h1 class="text-xl font-semibold">Feed</h1>
