@@ -59,6 +59,7 @@ defmodule Slab.MixProject do
       source_ref: "v#{@version}",
       extras: [
         "README.md",
+        "LICENSE.md",
         "guides/usage.md",
         "guides/reference.md",
         "guides/development.md"
