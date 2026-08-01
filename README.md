@@ -3,7 +3,7 @@
 > A composable data table component for Phoenix LiveView.
 
 <p align="center">
-  <img title="v1.0.0 Screenshot" src="https://raw.githubusercontent.com/chrislaskey/slab/refs/heads/main/examples/screenshot-v1.0.0.png" width="600">
+  <img title="v2.0.0 Screenshot" src="https://raw.githubusercontent.com/chrislaskey/slab/refs/heads/main/examples/screenshot-v2.0.0.gif" width="800">
 </p>
 
 ## Architecture
@@ -40,6 +40,10 @@ Slab can render a simple table over records you already have:
 </Slab.table>
 ```
 
+<p align="center">
+  <img title="v2.0.0 Screenshot Example 01" src="https://raw.githubusercontent.com/chrislaskey/slab/refs/heads/main/examples/screenshot-example-01-v2.0.0.png" width="800">
+</p>
+
 Or have Slab do the data fetching for you, which gets sorting and pagination for free:
 
 ```heex
@@ -49,6 +53,10 @@ Or have Slab do the data fetching for you, which gets sorting and pagination for
   <:pagination mode={:page} per_page={5} />
 </Slab.table>
 ```
+
+<p align="center">
+  <img title="v2.0.0 Screenshot Example 02" src="https://raw.githubusercontent.com/chrislaskey/slab/refs/heads/main/examples/screenshot-example-02-v2.0.0.png" width="800">
+</p>
 
 Now add some tabs for filters and custom columns:
 
@@ -62,6 +70,10 @@ Now add some tabs for filters and custom columns:
   <:pagination mode={:page} per_page={5} />
 </Slab.table>
 ```
+
+<p align="center">
+  <img title="v2.0.0 Screenshot Example 03" src="https://raw.githubusercontent.com/chrislaskey/slab/refs/heads/main/examples/screenshot-example-03-v2.0.0.png" width="800">
+</p>
 
 Slab's composition lets you continue to layer in features with declarative
 syntax. Here's an example with many additional features - inline editing, row
@@ -95,6 +107,10 @@ selection, export to CSV, custom tabs, custom column rendering, and more:
   <:pagination mode={:page} per_page={5} />
 </Slab.table>
 ```
+
+<p align="center">
+  <img title="v2.0.0 Screenshot Example 04" src="https://raw.githubusercontent.com/chrislaskey/slab/refs/heads/main/examples/screenshot-example-04-v2.0.0.png" width="800">
+</p>
 
 The functions referenced above — Slab passes the record and raw values, and
 the LiveView owns the queries and writes:
