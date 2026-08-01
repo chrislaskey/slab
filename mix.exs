@@ -35,7 +35,8 @@ defmodule Slab.MixProject do
       {:plug, "~> 1.14"},
       {:ecto, "~> 3.0", optional: true},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:ex_doc, "~> 0.34", only: :dev, runtime: false}
+      {:ex_doc, "~> 0.34", only: :dev, runtime: false},
+      {:mix_credence, ">= 0.0.0", only: :dev, runtime: false}
     ]
   end
 
@@ -54,7 +55,7 @@ defmodule Slab.MixProject do
 
   defp docs do
     [
-      main: "Slab",
+      main: "readme",
       source_ref: "v#{@version}",
       extras: [
         "README.md",
